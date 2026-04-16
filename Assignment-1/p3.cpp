@@ -114,9 +114,9 @@ void onAnimate(double dt) override {
             }
 
             //move away from them if they are close.
-        if (distance < 1.0) {
+        if (distance < 2.0) {
        
-        me.nudgeToward(them.pos(), -0.1);
+        me.nudgeToward(them.pos(), -0.05);
 
         average_pos += them.pos();
         average_heading += them.uf();
@@ -127,14 +127,15 @@ void onAnimate(double dt) override {
         average_heading += them.uf();
         neighbor_count += 1;
         }
+        
         }
 
         if(neighbor_count>0){
         average_heading = average_heading / neighbor_count;
         average_pos     = average_pos / neighbor_count;
 
-        me.nudgeToward  (average_pos,0.1);
-        me.faceToward   (me.pos() + average_heading, 0.1);
+        me.nudgeToward  (average_pos,0.05);
+        me.faceToward   (me.pos() + average_heading, 0.05);
         }
 
         if (neighbor_count==0) {
@@ -171,16 +172,16 @@ void onAnimate(double dt) override {
         float x_edge = edge * (float(width()) / height());
 
         if (relX > x_edge) {
-        me.pos() -= nav().ux() * (x_edge * 2 - 0.2);
+        me.pos() -= nav().ux() * (x_edge * 2 - 0.1);
         }
         if (relX < -x_edge) {
-        me.pos() += nav().ux() * (x_edge * 2 - 0.2);
+        me.pos() += nav().ux() * (x_edge * 2 - 0.1);
         }
         if (relY > x_edge) {
-        me.pos() -= nav().uy() * (edge * 2 - 0.2);
+        me.pos() -= nav().uy() * (edge * 2 - 0.1);
         }
         if (relY < -x_edge) {
-        me.pos() += nav().uy() * (edge * 2 - 0.2);
+        me.pos() += nav().uy() * (edge * 2 - 0.1);
         }
      
         
