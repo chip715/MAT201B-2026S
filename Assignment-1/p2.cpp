@@ -30,7 +30,7 @@ struct MyApp : public App {
   std::vector<int> lover;
   std::vector<Vec3d> knockback;
   
-  double t = 0; // Fixed: Added 't' to keep track of time for the 5-second timer
+  double t = 0; 
 
   void onInit() override {
     auto GUIdomain = GUIDomain::enableGUI(defaultWindowDomain());
@@ -53,11 +53,11 @@ struct MyApp : public App {
       a.quat(Quatd(Vec3d(rs(), rs(), rs())).normalize());
     }
 
-    lover.resize(n); // Fixed: Added 'n' so the vector knows what size to be
+    lover.resize(n);
     knockback.assign(n, Vec3d(0, 0, 0));
 
     for (int i = 0; i < agent.size(); i++){
-      lover[i] = pickOther(i, agent.size()); // Using your handy function!
+      lover[i] = pickOther(i, agent.size()); 
     }
   }
 

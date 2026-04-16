@@ -33,7 +33,7 @@ struct MyApp : public App {
   std::vector<int> lover;
   std::vector<Vec3d> knockback;
   
-  double t = 0; // Fixed: Added 't' to keep track of time for the 5-second timer
+  double t = 0; 
 
   void onInit() override {
     auto GUIdomain = GUIDomain::enableGUI(defaultWindowDomain());
