@@ -104,7 +104,6 @@ void onAnimate(double dt) override {
 
             float distance = (me.pos() - them.pos()).mag();
 
-
             if(closest_distance > distance) {
                 closest_distance = distance;
                 closest_index=j;
@@ -114,19 +113,19 @@ void onAnimate(double dt) override {
             }
 
             //move away from them if they are close.
-        if (distance < 2.0) {
-       
-        me.nudgeToward(them.pos(), -0.05);
 
-        average_pos += them.pos();
-        average_heading += them.uf();
-        neighbor_count += 1;
-        } 
-        else if (distance < neighbor_distance) {
-        average_pos += them.pos();
-        average_heading += them.uf();
-        neighbor_count += 1;
-        }
+
+            if (distance < neighbor_distance*10){
+                average_pos += them.pos();
+                average_heading += them.uf();
+                neighbor_count += 1;
+            }
+
+            if (distance < 1.0) {
+            float weight = (1.0-distance);
+            me.faceToward(them.pos(), (-0.05 * weight));
+            me.nudgeToward(them.pos(), (-0.005 * weight));
+            }
         
         }
 
@@ -134,28 +133,19 @@ void onAnimate(double dt) override {
         average_heading = average_heading / neighbor_count;
         average_pos     = average_pos / neighbor_count;
 
-        me.nudgeToward  (average_pos,0.05);
-        me.faceToward   (me.pos() + average_heading, 0.05);
+      //  me.nudgeToward  (average_pos,0.00015);
+        me.nudgeToward (average_heading,0.00015);
+        me.faceToward  (average_heading, 0.005);
         }
 
-        if (neighbor_count==0) {
+        
+        if (neighbor_count==0 && (me.pos() - agent[closest_index].pos()).mag() > 1.0) {
         //how do i pick a closest agent and turn toward them
+        me.faceToward   (agent[closest_index].pos(),0.009);
         me.nudgeToward  (agent[closest_index].pos(),0.0001);
-        me.faceToward   (agent[closest_index].pos(),0.001);
+        //me.faceToward   (agent[closest_index].pos(),0.001);
         }
 
-        //zaxis limit. if it gets too close to the camera.
-        // push it back
-  
-        if((me.pos() - nav().pos()).mag() < 5.0){
-        me.nudgeToward  (me.pos() + nav().uf(),0.01);
-        me.faceToward   (me.pos()+ nav().uf(),0.01);
-        }
-
-        if((me.pos() - nav().pos()).mag() > 50.0){
-        me.nudgeToward  (me.pos() + nav().uf(),-0.01);
-        me.faceToward   (me.pos()+ nav().uf(),-0.01);
-        }
 
         //wrap around
         //if it is the out side of the camaera view
@@ -172,16 +162,29 @@ void onAnimate(double dt) override {
         float x_edge = edge * (float(width()) / height());
 
         if (relX > x_edge) {
-        me.pos() -= nav().ux() * (x_edge * 2 - 0.1);
+        me.pos() -= nav().ux() * (x_edge * 2 - 0.05);
         }
         if (relX < -x_edge) {
-        me.pos() += nav().ux() * (x_edge * 2 - 0.1);
+        me.pos() += nav().ux() * (x_edge * 2 - 0.05);
         }
-        if (relY > x_edge) {
-        me.pos() -= nav().uy() * (edge * 2 - 0.1);
+        if (relY > edge) {
+        me.pos() -= nav().uy() * (edge * 2 - 0.05);
         }
-        if (relY < -x_edge) {
-        me.pos() += nav().uy() * (edge * 2 - 0.1);
+        if (relY < -edge) {
+        me.pos() += nav().uy() * (edge * 2 - 0.05);
+        }
+
+         //zaxis limit. if it gets too close to the camera.
+        // push it back
+  
+        if(relZ < 6.0){
+        me.nudgeToward  (me.pos() + nav().uf(),0.005);
+        //me.faceToward   (me.pos()+ nav().uf(),0.05);
+        }
+
+        if(relZ > 100.0){
+        me.nudgeToward  (me.pos() + nav().uf(),-0.005);
+        //me.faceToward   (me.pos()+ nav().uf(),-0.001);
         }
      
         
@@ -212,7 +215,7 @@ void onAnimate(double dt) override {
     // Movement & Physics
     for (int i = 0; i<agent.size(); i++) {
       auto& a = agent[i]; 
-      a.moveF(0.7);
+      a.moveF(0.5);
     //   a.pos() += knockback[i] * dt;      
     //   knockback[i] *= 0.9;
     }
