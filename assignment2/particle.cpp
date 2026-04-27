@@ -24,7 +24,7 @@ struct AlloApp : App {
   Parameter dragFactor{"/dragFactor", "", 0.1, 0.0, 0.9};
   Parameter springStiffness{"String Stiffness", 0.1, 0.0, 0.9};
   Parameter springLength{"Spring Length", 1, 0, 50};
-  Parameter repulsivity{"Repulsivity", 1, 0, 50};
+  Parameter repulsivity{"Repulsivity", 1, 0, 2};
   //
 
   ShaderProgram pointShader;
