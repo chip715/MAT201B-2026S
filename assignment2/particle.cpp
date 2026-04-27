@@ -4,6 +4,7 @@
 #include "al/app/al_App.hpp"
 #include "al/app/al_GUIDomain.hpp"
 #include "al/math/al_Random.hpp"
+#include "al/ui/al_Parameter.hpp"
 
 using namespace al;
 
@@ -21,6 +22,9 @@ struct AlloApp : App {
   Parameter pointSize{"/pointSize", "", 2.0, 1.0, 10.0};
   Parameter timeStep{"/timeStep", "", 0.1, 0.01, 0.6};
   Parameter dragFactor{"/dragFactor", "", 0.1, 0.0, 0.9};
+  Parameter springStiffness{"String Stiffness", 0.1, 0.0, 0.9};
+  Parameter springLength{"Spring Length", 1, 0, 50};
+  Parameter repulsivity{"Repulsivity", 1, 0, 50};
   //
 
   ShaderProgram pointShader;
@@ -38,6 +42,9 @@ struct AlloApp : App {
     gui.add(pointSize);  // add parameter to GUI
     gui.add(timeStep);   // add parameter to GUI
     gui.add(dragFactor);   // add parameter to GUI
+    gui.add(springStiffness);
+    gui.add(springLength);
+    gui.add(repulsivity);
     //
   }
 
@@ -73,6 +80,13 @@ struct AlloApp : App {
       force.push_back(randomVec3f(1));
     }
 
+    for(int i = 0; i< mesh.vertices().size(); i++){
+
+      mesh.vertices()[i].normalize();
+
+
+    }
+
     nav().pos(0, 0, 10);
   }
 
@@ -103,23 +117,44 @@ struct AlloApp : App {
       // calculate spring force between this particle and the origin
 
       auto& me = mesh.vertices()[i];
-      me.mag(); // how far am i from the origin?
+      float actual_length = me.mag(); // how far am i from the origin?
+      float force_amount = (springLength - actual_length) * springStiffness;//hookslaw
+     
+      Vec3f force_direction = me;
+      force_direction.normalize();
+
+      force[i] += force_direction * force_amount;
+      
     }
 
 
     // Calculate repulsive forces....
-    //
-    for (int i = 0; i < mesh.vertices().size(); ++i) {
+
+     for (int i = 0; i < mesh.vertices().size(); ++i) {
       for (int j = i + 1; j < mesh.vertices().size(); ++j) {
+        // what is the *direction* of the force? (with magnitude of 1)
+
+        Vec3f force_direction = (mesh.vertices()[i] - mesh.vertices()[j]);
+        float distance = force_direction.mag(); // aka "r"
+        force_direction /= distance; // the same as .normalize() in this case
+
+        float force_amount = repulsivity * mass[i] * mass[j] / (distance * distance);
+
         // i and j are a pair
         // limit large forces... if the force is too large, ignore it
 
+        if (force_amount > 10) {
+          force_amount = 10;
+        }
+
+        force[i] += force_direction * force_amount;
+        force[j] -= force_direction * force_amount;
       }
     }
 
 ///////// you probably do not need to edit the rest of this method...
 
-    // viscous drag
+    //viscous drag
     //
     for (int i = 0; i < velocity.size(); i++) {
       force[i] += - velocity[i] * dragFactor; // F = -bv
