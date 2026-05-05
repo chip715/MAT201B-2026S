@@ -40,11 +40,11 @@ struct AlloApp : DistributedAppWithState<WorldState> {
   Parameter springLength{"Spring Length", 6, 0, 50};
   //Parameter repulsivity{"Repulsivity", 1, 0, 2};
   Parameter smoothingRadius{"Smoothing Radius", 3.2, 0.5, 5.0}; // Controls the connection length!
-  Parameter gasStiffness{"Gas Stiffness", 42.0, 1.0, 1000.0};    // Replaces Repulsivity
+  Parameter gasStiffness{"Gas Stiffness", 42.0, 1.0, 100.0};    // Replaces Repulsivity
   Parameter restDensity{"Rest Density", 5.5, 1.0, 20.0};        // Fluid crowding
-  Parameter viscosity{"Viscosity", 1.4, 0.0, 5.0};
+  Parameter viscosity{"Viscosity", 1.4, 0.0, 10.0};
   Parameter enableWarp{"Enable Warp", 1.0, 0.0, 1.0};
-  Parameter focalDepth{"Focal Depth", 30.0, 5.0, 1000.0};
+  Parameter focalDepth{"Focal Depth", 75.0, 5.0, 100.0};
 
   ShaderProgram pointShader;
 
