@@ -137,7 +137,7 @@ struct AlloApp : DistributedAppWithState<WorldState> {
     Vec3f uf(nav().uf());
 
     // calculate spring force between this particle and the camera position focal point.
-    Vec3f focal_point = camPos + (uf * 13.0f); // Center of the fluid container
+    Vec3f focal_point = camPos + (uf * focalDepth); // Center of the fluid container
     for (int i = 0; i < velocity.size(); i++) {
       auto& me = mesh.vertices()[i];
       Vec3f dir = focal_point - me;
@@ -300,7 +300,7 @@ void onDraw(Graphics& g) override {
     if (!isPrimary()) {
       nav().set(state().camera);
     }
-
+ 
     g.clear(0.0);
     g.blending(true);
    // g.blendAdd(); 
