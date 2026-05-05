@@ -39,14 +39,12 @@ struct AlloApp : DistributedAppWithState<WorldState> {
   Parameter springStiffness{"Spring Stiffness", 0.1, 0.0, 0.9};
   Parameter springLength{"Spring Length", 6, 0, 50};
   //Parameter repulsivity{"Repulsivity", 1, 0, 2};
-
   Parameter smoothingRadius{"Smoothing Radius", 3.2, 0.5, 5.0}; // Controls the connection length!
-  Parameter gasStiffness{"Gas Stiffness", 42.0, 1.0, 100.0};    // Replaces Repulsivity
+  Parameter gasStiffness{"Gas Stiffness", 42.0, 1.0, 1000.0};    // Replaces Repulsivity
   Parameter restDensity{"Rest Density", 5.5, 1.0, 20.0};        // Fluid crowding
   Parameter viscosity{"Viscosity", 1.4, 0.0, 5.0};
-
   Parameter enableWarp{"Enable Warp", 1.0, 0.0, 1.0};
-
+  Parameter focalDepth{"Focal Depth", 30.0, 5.0, 1000.0};
 
   ShaderProgram pointShader;
 
@@ -74,6 +72,7 @@ struct AlloApp : DistributedAppWithState<WorldState> {
         gui.add(dragFactor);   // add parameter to GUI
         gui.add(springStiffness);
         gui.add(springLength);
+        gui.add(focalDepth);
        // gui.add(repulsivity);
         gui.add(smoothingRadius);
         gui.add(gasStiffness);
@@ -90,8 +89,7 @@ struct AlloApp : DistributedAppWithState<WorldState> {
                         slurp("../point-geometry.glsl"));
 
     // set initial conditions of the simulation
-
-    auto randomColor = []() { return HSV(rnd::uniform(), 1.0f, 1.0f); };
+    // auto randomColor = []() { return HSV(rnd::uniform(), 1.0f, 1.0f); };
 
     mesh.primitive(Mesh::POINTS);
 
@@ -139,7 +137,7 @@ struct AlloApp : DistributedAppWithState<WorldState> {
     Vec3f uf(nav().uf());
 
     // calculate spring force between this particle and the camera position focal point.
-Vec3f focal_point = camPos + (uf * 13.0f); // Center of the fluid container
+    Vec3f focal_point = camPos + (uf * 13.0f); // Center of the fluid container
     for (int i = 0; i < velocity.size(); i++) {
       auto& me = mesh.vertices()[i];
       Vec3f dir = focal_point - me;
@@ -239,6 +237,11 @@ Vec3f focal_point = camPos + (uf * 13.0f); // Center of the fluid container
       // "semi-implicit" Euler integration
       velocity[i] += force[i] / mass[i] * timeStep;
       position[i] += velocity[i] * timeStep;
+
+    float normalized_y = (position[i].y + 5.0f) / 10.0f;
+    normalized_y = std::max(0.0f, std::min(normalized_y, 1.0f));
+    state().color[i] = Color(normalized_y * 0.5f, normalized_y * 0.8f + 0.2f, 1.0f, 1.0f);
+
       if (enableWarp.get() > 0.05f){
           Vec3f relPos = position[i] - camPos;
           float relX = relPos.dot(ux);
@@ -246,7 +249,6 @@ Vec3f focal_point = camPos + (uf * 13.0f); // Center of the fluid container
           float relZ = relPos.dot(uf); 
 
           if (relZ > 0.001f) {
-            // Replaced M_PI to guarantee MSVC compilation
             float edge = relZ * tan((lens().fovy() / 2.0f) * (3.14159265f / 180.0f));
             float x_edge = edge * (float(width()) / height());
 
@@ -257,10 +259,11 @@ Vec3f focal_point = camPos + (uf * 13.0f); // Center of the fluid container
             if (relY < -edge) position[i] += uy * (edge * 2 - 0.05f);
           }
 
-            // Z-Axis Limits (Keep them in the viewing plane)
-            // if (relZ < 6.0f) position[i] += uf * 0.1f; 
-            // if (relZ > 20.0f) position[i] -= uf * 0.1f; 
+            float currentDepth = focalDepth.get();
+            if (relZ < currentDepth - 15.0f) position[i] += uf * 0.6f; 
+            if (relZ > currentDepth + 15.0f) position[i] -= uf * 0.6f;
           }
+
   }
     // 5. Cleanup & Network Sync
     for (auto &a : force) a.set(0); // clear all accelerations (IMPORTANT!!)
@@ -289,7 +292,7 @@ Vec3f focal_point = camPos + (uf * 13.0f); // Center of the fluid container
         force[i] = randomVec3f(1);
       }
     }
-
+ 
     return true;
   }
 
@@ -304,11 +307,20 @@ void onDraw(Graphics& g) override {
     g.blendTrans();
     g.depthTesting(false); // Turn off depth testing so transparent layers stack properly
 
-    if (!isPrimary()) {
-      for (int i = 0; i < N; i++) {
-        mesh.vertices()[i] = state().position[i];
-      }
+    // if (!isPrimary()) {
+    //   for (int i = 0; i < N; i++) {
+    //     mesh.vertices()[i] = state().position[i];
+    //   }
+    for (int i = 0; i < N; i++) {
+        if (!isPrimary()) mesh.vertices()[i] = state().position[i];
+        mesh.colors()[i] = state().color[i];
+        float normalized_y = (mesh.vertices()[i].y + 5.0f) / 10.0f;
+        normalized_y = std::max(0.0f, std::min(normalized_y, 1.0f));
+        mesh.colors()[i] = Color(normalized_y * 0.5f, normalized_y * 0.8f + 0.2f, 1.0f, 1.0f);
     }
+
+    g.shader().use(0); 
+    g.meshColor();
 
 
     // 1. DRAW RIBBONS 
@@ -363,7 +375,7 @@ void onDraw(Graphics& g) override {
       }
     }
 
-    g.draw(ribbons); // Successfully draws the blue fluid connections!
+    g.draw(ribbons); 
     g.blendAdd();
 
     // 2. DRAW PARTICLES SECOND
