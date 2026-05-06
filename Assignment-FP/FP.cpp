@@ -3,9 +3,11 @@
 
 #include "al/app/al_DistributedApp.hpp"
 #include "al/app/al_GUIDomain.hpp"
+#include "al/graphics/al_Shader.hpp"
 #include "al/math/al_Random.hpp"
 #include "al_ext/statedistribution/al_CuttleboneDomain.hpp"
 #include "al_ext/statedistribution/al_CuttleboneStateSimulationDomain.hpp"
+#include "al/graphics/al_Shapes.hpp"
 
 using namespace al;
 
@@ -28,28 +30,46 @@ struct WorldState {
   double time;
   int frame;
   Pose camera;
-  Vec3f position[N];
+  Vec3f position[N]; 
   Color color[N];
 };
 
 struct AlloApp : DistributedAppWithState<WorldState> {
-  Parameter pointSize{"/pointSize", "", 4.5, 1.0, 10.0};
-  Parameter timeStep{"/timeStep", "", 0.3, 0.01, 0.6};
-  Parameter dragFactor{"/dragFactor", "", 0.7, 0.0, 0.9};
-  Parameter springStiffness{"Spring Stiffness", 0.1, 0.0, 0.9};
-  Parameter springLength{"Spring Length", 6, 0, 50};
-  //Parameter repulsivity{"Repulsivity", 1, 0, 2};
-  Parameter smoothingRadius{"Smoothing Radius", 3.2, 0.5, 5.0}; // Controls the connection length!
-  Parameter gasStiffness{"Gas Stiffness", 42.0, 1.0, 100.0};    // Replaces Repulsivity
-  Parameter restDensity{"Rest Density", 5.5, 1.0, 20.0};        // Fluid crowding
-  Parameter viscosity{"Viscosity", 1.4, 0.0, 10.0};
-  Parameter enableWarp{"Enable Warp", 1.0, 0.0, 1.0};
-  Parameter focalDepth{"Focal Depth", 75.0, 5.0, 100.0};
+  //Define Controllable Variable Here.
+  //point
+  Parameter pointSize{"Point Size", "", 4.5, 1.0, 10.0};
+  Parameter timeStep{"Time Step", "", 0.3, 0.01, 0.6};
+  Parameter dragFactor{"Drag Factor", "", 0.7, 0.0, 0.9};
+
+  //Spring behavior
+  Parameter springStiffness {"Spring Stiffness", 0.1, 0.0, 0.9};
+  Parameter springLength    {"Spring Length", 6, 0, 50};
+  Parameter focalDepth      {"Focal Depth", 75.0, 5.0, 100.0};
+
+  //swarm Behavior Parameter
+  Parameter perceptionRadius    {"Perception Radius", 3.2, 0.5, 20.0}; 
+  Parameter repulsionStrength   {"Repulsion Strength", 42.0, 1.0, 100.0};    
+  Parameter desiredPersonalSpace{"Personal Space", 5.5, 1.0, 20.0};     
+  Parameter viscosity           {"Viscosity", 1.4, 0.0, 10.0};
+
+
+  //bubbles
+  Parameter bubbleSize          {"Bubble Size", 1.5, 0.1, 5.0};
+  
+
+  ParameterBool enableSpring  {"Enable Spring", "", 1.0f};
+  ParameterBool springToOrigin{"Spring Center to Origin", "", 0.0f};
+  ParameterBool enableSwarm   {"Enable Swarm", "", 1.0f};
+  ParameterBool enableWarp    {"Enable Warp", "", 1.0f};
+  ParameterBool enableRibbons {"Enable Ribbons", "", 1.0f};
+  ParameterBool enableBubbles {"Enable Bubbles", "", 1.0f};
 
   ShaderProgram pointShader;
+  ShaderProgram bubbleShader;
 
   //  simulation state
-  Mesh mesh;  // position *is inside the mesh* mesh.vertices() are the positions
+  Mesh mesh;
+  Mesh sphereMesh;
   vector<Vec3f> velocity;
   vector<Vec3f> force;
   vector<float> mass;
@@ -67,18 +87,31 @@ struct AlloApp : DistributedAppWithState<WorldState> {
     // set up GUI
         auto GUIdomain = GUIDomain::enableGUI(defaultWindowDomain());
         auto &gui = GUIdomain->newGUI();
-        gui.add(pointSize);  // add parameter to GUI
-        gui.add(timeStep);   // add parameter to GUI
-        gui.add(dragFactor);   // add parameter to GUI
+
+        //points
+        gui.add(pointSize); 
+        gui.add(timeStep);   
+        gui.add(dragFactor);   
+
+        //Springs
         gui.add(springStiffness);
         gui.add(springLength);
         gui.add(focalDepth);
-       // gui.add(repulsivity);
-        gui.add(smoothingRadius);
-        gui.add(gasStiffness);
-        gui.add(restDensity);
+        
+        //Swarm 
+        gui.add(perceptionRadius);
+        gui.add(repulsionStrength);
+        gui.add(desiredPersonalSpace);
         gui.add(viscosity);
+        gui.add(bubbleSize);
+
+        //Toggles
+        gui.add(enableSpring);
+        gui.add(springToOrigin);
+        gui.add(enableSwarm);
         gui.add(enableWarp);
+        gui.add(enableRibbons);
+        gui.add(enableBubbles);
     }
   }
 
@@ -87,7 +120,12 @@ struct AlloApp : DistributedAppWithState<WorldState> {
     pointShader.compile(slurp("../point-vertex.glsl"),
                         slurp("../point-fragment.glsl"),
                         slurp("../point-geometry.glsl"));
+    bubbleShader.compile(slurp("../bubble-vertex.glsl"),
+                        slurp("../bubble-fragment.glsl"));
 
+    addSphere(sphereMesh, 1.0, 16, 16);
+    sphereMesh.generateNormals(); 
+                        
     // set initial conditions of the simulation
     // auto randomColor = []() { return HSV(rnd::uniform(), 1.0f, 1.0f); };
 
@@ -132,23 +170,35 @@ struct AlloApp : DistributedAppWithState<WorldState> {
 
     //Camera position
     Vec3f camPos(nav().pos());
-    Vec3f ux(nav().ux());
-    Vec3f uy(nav().uy());
+    Vec3f ur(nav().ur()); //unit up axis aligned vs not aligned
+    Vec3f uu(nav().uu()); // unint right
     Vec3f uf(nav().uf());
 
-    // calculate spring force between this particle and the camera position focal point.
-    Vec3f focal_point = camPos + (uf * focalDepth); // Center of the fluid container
-    for (int i = 0; i < velocity.size(); i++) {
-      auto& me = mesh.vertices()[i];
-      Vec3f dir = focal_point - me;
-      float dist = dir.mag(); 
-      float force_amount = (dist - springLength) * springStiffness;
-      
-      if (dist > 0.0001f) {
-        dir /= dist; // normalize
-        force[i] += dir * force_amount;
+    // 1. Spring module
+    
+    if (enableSpring.get() == 1.0f) {
+      Vec3f focal_point;
+
+      if (springToOrigin.get() == 1.0f) {
+          focal_point = Vec3f(0.0f, 0.0f, 0.0f); // Anchor to the center of the world
+      } else {
+          focal_point = camPos + (uf * focalDepth.get());  // calculate spring force between this particle and the camera position focal point.
+      }
+
+
+      for (int i = 0; i < velocity.size(); i++) {
+        auto& me = mesh.vertices()[i];
+        Vec3f dir = focal_point - me;
+        float dist = dir.mag(); 
+        float force_amount = (dist - springLength) * springStiffness;
+        
+        if (dist > 0.0001f) {
+          dir /= dist; // normalize
+          force[i] += dir * force_amount;
+        }
       }
     }
+
     // Calculate repulsive forces....
     //  for (int i = 0; i < mesh.vertices().size(); ++i) {
     //   for (int j = i + 1; j < mesh.vertices().size(); ++j) {
@@ -172,30 +222,32 @@ struct AlloApp : DistributedAppWithState<WorldState> {
     //   }
     // }
 
-    //SPH
-    float h = smoothingRadius;             // Smoothing Length (Radius of influence)
-    float rest_density = restDensity;  // Target Density (rho_0)
-    float k_gas = gasStiffness;        // Stiffness/Pressure multiplier
-    float mu = viscosity;            // Viscosity (thickness)
+    if(enableSwarm.get() == 1.0f){
+    float radius = perceptionRadius.get();              // Smoothing Length (Radius of influence)
+    float target_space = desiredPersonalSpace.get();    // Target Density (rho_0)
+    float repulsion_factor = repulsionStrength.get();   // Stiffness/Pressure multiplier
+    float friction_factor = viscosity.get();            // Viscosity (thickness)
 
-    float h2 = h * h;
-    float poly6 = 315.0f / (64.0f * 3.14159265f * pow(h, 9));
-    float spiky_grad = -45.0f / (3.14159265f * pow(h, 6));
-    float visc_lap = 45.0f / (3.14159265f * pow(h, 6));
+    float radius2 = radius * radius;
+    
+    float proximity_weight    = 315.0f / (64.0f * 3.14159265f * pow(radius, 9));
+    float repulsion_gradient  = -45.0f / (3.14159265f * pow(radius, 6));
+    float alignment_weight    = 45.0f / (3.14159265f * pow(radius, 6));
 
-    std::vector<float> density(mesh.vertices().size(), 0.0f);
-    std::vector<float> pressure(mesh.vertices().size(), 0.0f);
+    std::vector<float> crowdedness(mesh.vertices().size(), 0.0f);
+    std::vector<float> claustrophobia(mesh.vertices().size(), 0.0f);
+
 // PASS 1: Calculate Density & Pressure
     for (int i = 0; i < mesh.vertices().size(); ++i) {
       for (int j = 0; j < mesh.vertices().size(); ++j) {
         Vec3f dir = mesh.vertices()[i] - mesh.vertices()[j];
         float r2 = dir.mag() * dir.mag();
 
-        if (r2 < h2) {
-          density[i] += mass[j] * poly6 * pow(h2 - r2, 3);
+        if (r2 < radius2) {
+          crowdedness[i] += mass[j] * proximity_weight * pow(radius2 - r2, 3);
         }
       }
-      pressure[i] = k_gas * (density[i] - rest_density);
+      claustrophobia[i] = repulsion_factor * (crowdedness[i] - target_space);
     }
 
     // PASS 2: Calculate Pressure and Viscosity Forces
@@ -205,31 +257,32 @@ struct AlloApp : DistributedAppWithState<WorldState> {
         Vec3f dir = mesh.vertices()[i] - mesh.vertices()[j];
         float r = dir.mag();
 
-        if (r < h && r > 0.0001f) {
+        if (r < radius && r > 0.0001f) {
           dir /= r; // Normalize direction
 
-          float p_term = (pressure[i] + pressure[j]) / 2.0f;
-          float kernel_grad = spiky_grad * (h - r) * (h - r);
-          float f_press_mag = -p_term * kernel_grad; 
+          float shared_claustrophobia = (claustrophobia[i] + claustrophobia[j]) / 2.0f;
+          float kernel_grad = repulsion_gradient * (radius - r) * (radius - r);
+          float push_mag = -shared_claustrophobia * kernel_grad; 
 
           Vec3f v_diff = velocity[j] - velocity[i];
-          float kernel_lap = visc_lap * (h - r);
+          float kernel_lap = alignment_weight * (radius - r);
           
           // Safety check: prevent division by zero
-          float safe_density = (density[j] > 0.0001f) ? density[j] : 0.0001f;
-          Vec3f f_visc = v_diff * (mu * mass[j] * kernel_lap / safe_density);
-
-          Vec3f total_force = (dir * f_press_mag) + f_visc;
+          float safe_crowding = (crowdedness[j] > 0.0001f) ? crowdedness[j] : 0.0001f;
+          Vec3f alignment_force = v_diff * (friction_factor * mass[j] * kernel_lap / safe_crowding);
+        
+          Vec3f total_force = (dir * push_mag) + alignment_force;
           
           force[i] += total_force;
           force[j] -= total_force; 
         }
       }
     }
-    //viscous drag
-    for (int i = 0; i < velocity.size(); i++) {
-      force[i] += - velocity[i] * dragFactor; // F = -bv
-    }
+  }
+  //viscous drag
+  for (int i = 0; i < velocity.size(); i++) {
+    force[i] += - velocity[i] * dragFactor; // F = -bv
+  }
 
     // Numerical Integration
     vector<Vec3f> &position(mesh.vertices());
@@ -242,10 +295,10 @@ struct AlloApp : DistributedAppWithState<WorldState> {
     normalized_y = std::max(0.0f, std::min(normalized_y, 1.0f));
     state().color[i] = Color(normalized_y * 0.5f, normalized_y * 0.8f + 0.2f, 1.0f, 1.0f);
 
-      if (enableWarp.get() > 0.05f){
+      if (enableWarp.get() == 1.0f){
           Vec3f relPos = position[i] - camPos;
-          float relX = relPos.dot(ux);
-          float relY = relPos.dot(uy);
+          float relX = relPos.dot(ur); 
+          float relY = relPos.dot(uu); 
           float relZ = relPos.dot(uf); 
 
           if (relZ > 0.001f) {
@@ -253,16 +306,17 @@ struct AlloApp : DistributedAppWithState<WorldState> {
             float x_edge = edge * (float(width()) / height());
 
             // Warp X and Y
-            if (relX > x_edge) position[i] -= ux * (x_edge * 2 - 0.05f);
-            if (relX < -x_edge) position[i] += ux * (x_edge * 2 - 0.05f);
-            if (relY > edge) position[i] -= uy * (edge * 2 - 0.05f);
-            if (relY < -edge) position[i] += uy * (edge * 2 - 0.05f);
+            if (relX > x_edge) position[i] -= ur * (x_edge * 2 - 0.05f);
+            if (relX < -x_edge) position[i] += ur * (x_edge * 2 - 0.05f);
+            if (relY > edge) position[i] -= uu * (edge * 2 - 0.05f);
+            if (relY < -edge) position[i] += uu * (edge * 2 - 0.05f);
           }
 
             float currentDepth = focalDepth.get();
             if (relZ < currentDepth - 15.0f) position[i] += uf * 0.6f; 
             if (relZ > currentDepth + 15.0f) position[i] -= uf * 0.6f;
-          }
+      }
+          
 
   }
     // 5. Cleanup & Network Sync
@@ -324,10 +378,11 @@ void onDraw(Graphics& g) override {
 
 
     // 1. DRAW RIBBONS 
+    if (enableRibbons.get() == 1.0f) {
     Mesh ribbons;
     ribbons.primitive(Mesh::TRIANGLES);
 
-    float h = smoothingRadius; // Link visuals directly to the physics slider!
+    float h = perceptionRadius.get(); // Link visuals directly to the physics slider!
     float line_thickness = 0.02f; 
 
     for (int i = 0; i < N; i++) {
@@ -374,14 +429,45 @@ void onDraw(Graphics& g) override {
         }
       }
     }
+  
 
     g.draw(ribbons); 
     g.blendAdd();
-
+  }
     // 2. DRAW PARTICLES SECOND
-    g.shader(pointShader);
-    g.shader().uniform("pointSize", pointSize / 100);
-    g.draw(mesh);
+if (enableBubbles.get() == 1.0f) {
+      // BUBBLE MODE (The Wojtan Optical Illusion)
+      g.shader().use(0); 
+      g.blending(true);
+      g.blendTrans();    
+      g.depthTesting(true); 
+
+      float b_size = bubbleSize.get();
+      
+      for (int i = 0; i < N; i++) {
+        g.shader(bubbleShader);
+        g.pushMatrix();
+        g.translate(mesh.vertices()[i]);
+        g.scale(b_size);
+        g.cullFace(false);
+        
+        
+        Color c = mesh.colors()[i];
+        g.color(c.r, c.g, c.b, 0.3f); 
+        
+        g.draw(sphereMesh); // Render the actual 3D template sphere
+        g.popMatrix();
+      }
+
+    } else {
+      // ORIGINAL POINT MODE
+      g.blending(true);
+      g.blendAdd();
+      g.depthTesting(false);
+      g.shader(pointShader);
+      g.shader().uniform("pointSize", pointSize / 100);
+      g.draw(mesh);
+    }
   }
 };
 
