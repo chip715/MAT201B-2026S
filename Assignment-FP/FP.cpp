@@ -141,14 +141,26 @@ public:
              << " }" << endl;
     }
 
-    float getValue(string line, string key) {
+float getValue(string line, string key) {
         size_t pos = line.find(key + ":"); 
         if (pos == string::npos) return 0.0f;
+        
+        // Grab everything after the key prefix identifier
         string sub = line.substr(pos + key.length() + 1); 
-        return stof(sub);
+        
+        // Strip trailing commas, spaces, or closing curly braces safely
+        size_t endPos = sub.find_first_of(",}");
+        if (endPos != string::npos) {
+            sub = sub.substr(0, endPos);
+        }
+        
+        try {
+            return stof(sub);
+        } catch (...) {
+            return 0.0f; // Safe fallback if string is malformed
+        }
     }
 
-    // --- LOAD FUNCTION ---
     void load(const string& filename) {
         events.clear();
         ifstream file(filename);
@@ -163,7 +175,20 @@ public:
                 Keyframe k;
                 k.duration = getValue(line, "duration");
                 k.pos = Vec3f(getValue(line, "posX"), getValue(line, "posY"), getValue(line, "posZ"));
-                k.rot = Quatf(getValue(line, "rotW"), getValue(line, "rotX"), getValue(line, "rotY"), getValue(line, "rotZ"));
+                
+                // Parse rotation entries
+                float w = getValue(line, "rotW");
+                float x = getValue(line, "rotX");
+                float y = getValue(line, "rotY");
+                float z = getValue(line, "rotZ");
+                
+                // Fallback to identity rotation if data matrix collapses to zero
+                if (w == 0.0f && x == 0.0f && y == 0.0f && z == 0.0f) {
+                    w = 1.0f;
+                }
+                
+                // CRITICAL FIX: Explicitly normalize quaternion to prevent SLERP jumping/stalling
+                k.rot = Quatf(w, x, y, z).normalize();
                 
                 // Sliders
                 k.activeParticles = (int)getValue(line, "activeParticles");
@@ -444,18 +469,22 @@ struct AlloApp : DistributedAppWithState<WorldState> {
             float t = timeline.timer / totalTransitionTime;
             if (t > 1.0f) t = 1.0f; 
 
-            // Smooth camera movements
-            nav().pos().lerp(next.pos, t);
-            nav().quat().slerp(next.rot, t);
+            // FIX: Enforce strict, isolated linear interpolation between raw keyframe parameters
+            Vec3f blendPos = curr.pos + (next.pos - curr.pos) * t;
+            Quatf blendRot = Quatf::slerp(curr.rot, next.rot, t);
 
-            // Interpolating view properties
+            // Directly override the camera matrix state to match the pristine timeline trajectory
+            nav().pos().set(blendPos);
+            nav().quat().set(blendRot);
+
+            // Interpolating view properties smoothly (Type-safe synchronization for ImGui)
             activeParticles.set(static_cast<int>(curr.activeParticles + (next.activeParticles - curr.activeParticles) * t));
             maxRibbons.set(static_cast<int>(curr.maxRibbons + (next.maxRibbons - curr.maxRibbons) * t));
             pointSize.set(curr.pointSize + (next.pointSize - curr.pointSize) * t);
             focalDepth.set(curr.focalDepth + (next.focalDepth - curr.focalDepth) * t);
             bubbleSize.set(curr.bubbleSize + (next.bubbleSize - curr.bubbleSize) * t);
 
-            // Physics settings snap forward cleanly to keep forces stable
+            // Keep physical simulation constants snapping instantly at boundaries
             timeStep.set(next.timeStep);
             dragFactor.set(next.dragFactor);
             springStiffness.set(next.springStiffness);
