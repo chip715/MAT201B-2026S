@@ -46,3 +46,6 @@ bin/
 
 # debug information files
 *.dwo
+Assignment-FP/FIZEDFP.cpp
+Assignment-FP/TEST.cpp
+Assignment-FP/distributed_app.toml

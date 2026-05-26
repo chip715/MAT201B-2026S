@@ -14,6 +14,7 @@
 #include <random>
 #include <vector>
 #include <unordered_map>
+#include <iostream>
 
 using namespace al;
 using namespace std;
@@ -22,21 +23,19 @@ Vec3f randomVec3f(float scale) {
   return Vec3f(rnd::uniformS(), rnd::uniformS(), rnd::uniformS()) * scale;
 }
 
-string slurp(string fileName);  // forward declaration
+string slurp(string fileName);  
 
-const int N = 300;
+const int MAX_N = 500; 
 
-// =========================================================
-// SPATIAL HASH GRID (Keeps the ribbons running at 60 FPS!)
-// =========================================================
+// SPATIAL HASH GRID
 struct SpatialHash {
   float cellSize;
   std::unordered_map<unsigned long long, std::vector<int>> cells;
 
-  void build(const std::vector<Vec3f>& positions, float radius) {
+  void build(const std::vector<Vec3f>& positions, float radius, int count) {
     cellSize = radius;
     cells.clear();
-    for (int i = 0; i < positions.size(); ++i) {
+    for (int i = 0; i < count; ++i) {
       unsigned long long hash = getHash(positions[i]);
       cells[hash].push_back(i);
     }
@@ -77,78 +76,151 @@ struct SpatialHash {
   }
 };
 
-
 struct WorldState {
   double time;
   int frame;
   Pose camera;
-  Vec3f position[N]; 
-  Color color[N];
+  Vec3f position[MAX_N]; 
+  Color color[MAX_N];
+};
+
+struct Keyframe {
+    string name;
+    float duration;
+    float focalDepth, springLength;
+    Vec3f pos;
+    Quatf rot;
+};
+
+class Timeline {
+public:
+    vector<Keyframe> events;
+    int currentIndex = 0;
+    float timer = 0.0f;
+    bool active = false;
+
+    void save(const string& filename, const string& name, float dur, float fd, float sl, const Vec3f& p, const Quatf& r) {
+        ofstream file(filename, ios::app);
+        file << "{ name: " << name << ", duration: " << dur 
+             << ", focalDepth: " << fd << ", springLength: " << sl 
+             << ", posX: " << p.x << ", posY: " << p.y << ", posZ: " << p.z 
+             << ", rotW: " << r.w << ", rotX: " << r.x << ", rotY: " << r.y << ", rotZ: " << r.z 
+             << " }" << endl;
+    }
+
+    float getValue(string line, string key) {
+        size_t pos = line.find(key + ":");
+        if (pos == string::npos) return 0.0f;
+        string sub = line.substr(pos + key.length() + 1);
+        return stof(sub);
+    }
+
+    void load(const string& filename) {
+        events.clear();
+        ifstream file(filename);
+        string line;
+        while (getline(file, line)) {
+            if (line.find("{") != string::npos) {
+                Keyframe k;
+                k.duration = getValue(line, "duration");
+                k.focalDepth = getValue(line, "focalDepth");
+                k.springLength = getValue(line, "springLength");
+                k.pos = Vec3f(getValue(line, "posX"), getValue(line, "posY"), getValue(line, "posZ"));
+                k.rot = Quatf(getValue(line, "rotW"), getValue(line, "rotX"), getValue(line, "rotY"), getValue(line, "rotZ"));
+                events.push_back(k);
+            }
+        }
+    }
 };
 
 struct AlloApp : DistributedAppWithState<WorldState> {
   // GUI Parameters
+  ParameterInt activeParticles{"Active Particles", "", 100, 10, MAX_N};
+  ParameterInt maxRibbons{"Max Ribbons", "", 10, 1, 25};
+
   Parameter pointSize{"Point Size", "", 4.5, 1.0, 10.0};
   Parameter timeStep{"Time Step", "", 0.3, 0.01, 0.6};
   Parameter dragFactor{"Drag Factor", "", 0.7, 0.0, 0.9};
 
   Parameter springStiffness {"Spring Stiffness", 0.1, 0.0, 0.9};
   Parameter springLength    {"Spring Length", 6, 0, 50};
-  Parameter focalDepth      {"Focal Depth", 75.0, 5.0, 100.0};
+  Parameter focalDepth      {"Focal Depth", 10.0, -10.0, 100.0};
 
   Parameter perceptionRadius    {"Perception Radius", 3.2, 0.5, 20.0}; 
   Parameter repulsionStrength   {"Repulsion Strength", 42.0, 1.0, 100.0};    
   Parameter desiredPersonalSpace{"Personal Space", 5.5, 1.0, 20.0};     
   Parameter viscosity           {"Viscosity", 1.4, 0.0, 10.0};
 
-  Parameter bubbleSize          {"Bubble Size", 1.5, 0.1, 5.0};
+  Parameter bubbleSize          {"Bubble Size", 1.5, 0.01, 5.0};
   
   ParameterBool enableSpring  {"Enable Spring", "", 1.0f};
   ParameterBool springToOrigin{"Spring Center to Origin", "", 0.0f};
   ParameterBool enableSwarm   {"Enable Swarm", "", 1.0f};
   ParameterBool enableWarp    {"Enable Warp", "", 1.0f};
   ParameterBool enableRibbons {"Enable Ribbons", "", 1.0f};
+  ParameterBool curvyLines    {"Curvy Lines", "", 1.0f}; 
   ParameterBool enableBubbles {"Enable Bubbles", "", 1.0f};
+  
+  ParameterBool startAutomation{"Start Automation", "", 0.0f};
+  ParameterBool saveKeyframe{"Save Keyframe", "", 0.0f};
 
   ShaderProgram pointShader;
   ShaderProgram bubbleShader; 
 
   Mesh mesh;
   Mesh sphereMesh; 
+  Timeline timeline;
+
   vector<Vec3f> velocity;
   vector<Vec3f> force;
   vector<float> mass;
 
-
   void onInit() override {
+    // auto cuttleboneDomain = CuttleboneStateSimulationDomain<WorldState>::enableCuttlebone(this);
+    // if (!cuttleboneDomain) {
+    //   std::cerr << "WARNING: Cuttlebone failed to start. Running local mode fallback." << std::endl;
+    // }
+
     if (isPrimary()) {
         auto GUIdomain = GUIDomain::enableGUI(defaultWindowDomain());
         auto &gui = GUIdomain->newGUI();
 
+        gui.add(activeParticles);
+        gui.add(maxRibbons);
         gui.add(pointSize); 
         gui.add(timeStep);   
         gui.add(dragFactor);   
-
         gui.add(springStiffness);
         gui.add(springLength);
         gui.add(focalDepth);
-        
         gui.add(perceptionRadius);
         gui.add(repulsionStrength);
         gui.add(desiredPersonalSpace);
         gui.add(viscosity);
         gui.add(bubbleSize);
-
         gui.add(enableSpring);
         gui.add(springToOrigin);
         gui.add(enableSwarm);
         gui.add(enableWarp);
         gui.add(enableRibbons);
+        gui.add(curvyLines); 
         gui.add(enableBubbles);
+        gui.add(startAutomation);
+        gui.add(saveKeyframe);
+        
+        timeline.load("events.txt");
     }
+
+    parameterServer() << pointSize << timeStep << dragFactor << springStiffness 
+                      << springLength << focalDepth << perceptionRadius 
+                      << repulsionStrength << desiredPersonalSpace << viscosity 
+                      << bubbleSize << enableSpring << springToOrigin 
+                      << enableSwarm << enableWarp << enableRibbons 
+                      << enableBubbles << startAutomation << saveKeyframe;
   }
 
   void onCreate() override {
+    // RESTORED: Loading your custom shaders using the slurp function paths
     pointShader.compile(slurp("../point-vertex.glsl"),
                         slurp("../point-fragment.glsl"),
                         slurp("../point-geometry.glsl"));
@@ -156,12 +228,12 @@ struct AlloApp : DistributedAppWithState<WorldState> {
     bubbleShader.compile(slurp("../bubble-vertex.glsl"),
                          slurp("../bubble-fragment.glsl"));
 
-    addSphere(sphereMesh, 1.0, 16, 16);
+    addSphere(sphereMesh, 1.0, 32, 32);
     sphereMesh.generateNormals(); 
                         
     mesh.primitive(Mesh::POINTS);
 
-    for (int _ = 0; _ < N; _++) {
+    for (int _ = 0; _ < MAX_N; _++) {
       mesh.vertex(randomVec3f(5));
       mesh.color(1.0, 1.0, 1.0);  
 
@@ -175,7 +247,7 @@ struct AlloApp : DistributedAppWithState<WorldState> {
       force.push_back(randomVec3f(1));
     }
     
-    for(int i = 0; i< mesh.vertices().size(); i++){
+    for(int i = 0; i < MAX_N; i++){
       mesh.vertices()[i].normalize();
     }
 
@@ -192,18 +264,43 @@ struct AlloApp : DistributedAppWithState<WorldState> {
 
     if (freeze) return;
 
+    // --- 1. AUTOMATION LOGIC ---
+    if (startAutomation.get()) {
+        timeline.active = !timeline.active;
+        startAutomation.set(0); 
+    }
+
+    if (timeline.active && !timeline.events.empty()) {
+        Keyframe& curr = timeline.events[timeline.currentIndex];
+        Keyframe& next = timeline.events[(timeline.currentIndex + 1) % timeline.events.size()];
+        
+        timeline.timer += dt;
+        float t = timeline.timer / curr.duration;
+        
+        focalDepth.set(curr.focalDepth + (next.focalDepth - curr.focalDepth) * t);
+        springLength.set(curr.springLength + (next.springLength - curr.springLength) * t);
+        
+        nav().pos().lerp(next.pos, t);
+        nav().quat().slerp(next.rot, t);
+
+        if (t >= 1.0f) {
+            timeline.currentIndex = (timeline.currentIndex + 1) % timeline.events.size();
+            timeline.timer = 0.0f;
+        }
+    }
+
     Vec3f camPos(nav().pos());
     Vec3f ur(nav().ur()); 
     Vec3f uu(nav().uu()); 
     Vec3f uf(nav().uf());
 
-    // 1. Spring module
-    if (enableSpring.get() == 1.0f) {
-      Vec3f focal_point;
-      if (springToOrigin.get() == 1.0f) focal_point = Vec3f(0.0f, 0.0f, 0.0f); 
-      else focal_point = camPos + (uf * focalDepth.get());  
+    int current_N = activeParticles.get();
 
-      for (int i = 0; i < velocity.size(); i++) {
+    // --- 2. PHYSICS ENGINE MODULES ---
+    if (enableSpring.get() == 1.0f) {
+      Vec3f focal_point = (springToOrigin.get() == 1.0f) ? Vec3f(0.0f, 0.0f, 0.0f) : camPos + (uf * focalDepth.get());  
+
+      for (int i = 0; i < current_N; i++) {
         auto& me = mesh.vertices()[i];
         Vec3f dir = focal_point - me;
         float dist = dir.mag(); 
@@ -215,7 +312,6 @@ struct AlloApp : DistributedAppWithState<WorldState> {
       }
     }
 
-    // 2. Swarm Physics
     if(enableSwarm.get() == 1.0f){
       float radius = perceptionRadius.get();              
       float target_space = desiredPersonalSpace.get();    
@@ -227,14 +323,13 @@ struct AlloApp : DistributedAppWithState<WorldState> {
       float repulsion_gradient  = -45.0f / (3.14159265f * pow(radius, 6));
       float alignment_weight    = 45.0f / (3.14159265f * pow(radius, 6));
 
-      std::vector<float> crowdedness(mesh.vertices().size(), 0.0f);
-      std::vector<float> claustrophobia(mesh.vertices().size(), 0.0f);
+      std::vector<float> crowdedness(MAX_N, 0.0f);
+      std::vector<float> claustrophobia(MAX_N, 0.0f);
 
       SpatialHash physicsGrid;
-      physicsGrid.build(mesh.vertices(), radius);
+      physicsGrid.build(mesh.vertices(), radius, current_N);
 
-      // PASS 1: Density
-      for (int i = 0; i < mesh.vertices().size(); ++i) {
+      for (int i = 0; i < current_N; ++i) {
         auto neighbors = physicsGrid.getNeighbors(mesh.vertices()[i]);
         for (int j : neighbors) {
           Vec3f dir = mesh.vertices()[i] - mesh.vertices()[j];
@@ -246,8 +341,11 @@ struct AlloApp : DistributedAppWithState<WorldState> {
         claustrophobia[i] = repulsion_factor * (crowdedness[i] - target_space);
       }
 
-      // PASS 2: Forces
-      for (int i = 0; i < mesh.vertices().size(); ++i) {
+      float b_size = bubbleSize.get();
+      float min_dist = b_size * 2.0f; 
+      float barrier_threshold = 0.5f;
+
+      for (int i = 0; i < current_N; ++i) {
         auto neighbors = physicsGrid.getNeighbors(mesh.vertices()[i]);
         for (int j : neighbors) {
           if (j <= i) continue; 
@@ -258,14 +356,32 @@ struct AlloApp : DistributedAppWithState<WorldState> {
           if (r < radius && r > 0.0001f) {
             dir /= r; 
 
-            float shared_claustrophobia = (claustrophobia[i] + claustrophobia[j]) / 2.0f;
-            float kernel_grad = repulsion_gradient * (radius - r) * (radius - r);
-            float push_mag = -shared_claustrophobia * kernel_grad; 
+            float push_mag = 0.0f;
+            bool used_barrier = false;
+
+            float avg_mass = (mass[i] + mass[j]) / 2.0f;
+            float avg_crowding = (crowdedness[i] + crowdedness[j]) / 2.0f;
+
+            if (enableBubbles.get() == 1.0f) {
+                float gap = r - min_dist;
+                if (gap < barrier_threshold) { 
+                    float penetration = barrier_threshold - gap;
+                    push_mag = penetration * repulsionStrength.get() * 5.0f; 
+                    used_barrier = true;
+                }
+            }
+
+            if (!used_barrier) {
+                float shared_claustrophobia = (claustrophobia[i] + claustrophobia[j]) / 2.0f;
+                float kernel_grad = repulsion_gradient * (radius - r) * (radius - r);
+                push_mag = -shared_claustrophobia * kernel_grad; 
+            }
 
             Vec3f v_diff = velocity[j] - velocity[i];
             float kernel_lap = alignment_weight * (radius - r);
-            float safe_crowding = (crowdedness[j] > 0.0001f) ? crowdedness[j] : 0.0001f;
-            Vec3f alignment_force = v_diff * (friction_factor * mass[j] * kernel_lap / safe_crowding);
+            
+            float safe_crowding = (avg_crowding > 1.0f) ? avg_crowding : 1.0f;
+            Vec3f alignment_force = v_diff * (friction_factor * avg_mass * kernel_lap / safe_crowding);
           
             Vec3f total_force = (dir * push_mag) + alignment_force;
             force[i] += total_force;
@@ -275,11 +391,11 @@ struct AlloApp : DistributedAppWithState<WorldState> {
       }
     }
     
-    for (int i = 0; i < velocity.size(); i++) force[i] += - velocity[i] * dragFactor.get(); 
+    for (int i = 0; i < current_N; i++) force[i] += - velocity[i] * dragFactor.get(); 
 
-    // Numerical Integration
+    // --- 3. NUMERICAL INTEGRATION & SYSTEM COPIES ---
     vector<Vec3f> &position(mesh.vertices());
-    for (int i = 0; i < velocity.size(); i++) {
+    for (int i = 0; i < current_N; i++) {
       velocity[i] += force[i] / mass[i] * timeStep.get();
       position[i] += velocity[i] * timeStep.get();
 
@@ -308,19 +424,46 @@ struct AlloApp : DistributedAppWithState<WorldState> {
           if (relZ > currentDepth + 15.0f) position[i] -= uf * 0.6f;
       }
     }
-    
+
+    if (enableBubbles.get() == 1.0f) {
+        float min_dist = bubbleSize.get() * 2.0f;
+        for (int iter = 0; iter < 3; iter++) {
+            for (int i = 0; i < current_N; i++) {
+                for (int j = i + 1; j < current_N; j++) {
+                    Vec3f dir = position[i] - position[j];
+                    float dist = dir.mag();
+                    if (dist < min_dist && dist > 0.0001f) {
+                        float overlap = min_dist - dist;
+                        dir.normalize();
+                        float total_mass = mass[i] + mass[j];
+                        position[i] += dir * (overlap * (mass[j] / total_mass));
+                        position[j] -= dir * (overlap * (mass[i] / total_mass));
+                    }
+                }
+            }
+        }
+    }
+
+    // --- 4. SNAPSHOT KEYFRAME RECORDER ---
+    if (saveKeyframe.get()) {
+        timeline.save("events.txt", "Event", 5.0, focalDepth.get(), springLength.get(), nav().pos(), nav().quat());
+        cout << "Snapshot saved to events.txt" << endl;
+        saveKeyframe.set(0); 
+    }
+
+    // --- 5. CLUSTER STATE FINALIZATION ---
     for (auto &a : force) a.set(0); 
-    for (int i = 0; i < N; i++) state().position[i] = mesh.vertices()[i];
+    for (int i = 0; i < current_N; i++) state().position[i] = mesh.vertices()[i];
     state().camera.set(nav());  
   }
 
   bool onKeyDown(const Keyboard& k) override {
     if (k.key() == ' ') freeze = !freeze;
     if (k.key() == '1') {
-      for (int i = 0; i < velocity.size(); i++) force[i] += randomVec3f(1);
+      for (int i = 0; i < MAX_N; i++) force[i] += randomVec3f(1);
     }
     if (k.key() == 'r') {
-      for (int i = 0; i < velocity.size(); i++) {
+      for (int i = 0; i < MAX_N; i++) {
         mesh.vertices()[i] = randomVec3f(5);
         velocity[i] = randomVec3f(0.1);
         force[i] = randomVec3f(1);
@@ -337,7 +480,10 @@ struct AlloApp : DistributedAppWithState<WorldState> {
     g.blendTrans();
     g.depthTesting(false); 
 
-    for (int i = 0; i < N; i++) {
+    int current_N = activeParticles.get();
+    int connection_limit = maxRibbons.get();
+
+    for (int i = 0; i < current_N; i++) {
         if (!isPrimary()) mesh.vertices()[i] = state().position[i];
         mesh.colors()[i] = state().color[i];
         float normalized_y = (mesh.vertices()[i].y + 5.0f) / 10.0f;
@@ -346,22 +492,22 @@ struct AlloApp : DistributedAppWithState<WorldState> {
     }
 
     g.shader().use(0); 
-    g.meshColor();
+    g.meshColor(); 
 
-    // 1. DRAW SMOOTH BEZIER RIBBONS
     if (enableRibbons.get() == 1.0f) {
       Mesh ribbons;
       ribbons.primitive(Mesh::TRIANGLES);
 
       float h = perceptionRadius.get(); 
       float line_thickness = 0.02f; 
-      int segments = 8;
+      int segments = (curvyLines.get() == 1.0f) ? 8 : 1; 
 
       SpatialHash drawGrid;
-      drawGrid.build(mesh.vertices(), h);
+      drawGrid.build(mesh.vertices(), h, current_N);
 
-      for (int i = 0; i < N; i++) {
+      for (int i = 0; i < current_N; i++) {
         auto neighbors = drawGrid.getNeighbors(mesh.vertices()[i]);
+        int drawn_count = 0; 
         
         for (int j : neighbors) { 
           if (j <= i) continue; 
@@ -371,6 +517,8 @@ struct AlloApp : DistributedAppWithState<WorldState> {
           float distance = (B - A).mag();
 
           if (distance < h && distance > 0.0001f) {
+            if (drawn_count >= connection_limit) break;
+            drawn_count++; 
             
             Vec3f dirA = velocity[i];
             if (dirA.mag() < 0.001f) dirA = (B - A);
@@ -381,9 +529,16 @@ struct AlloApp : DistributedAppWithState<WorldState> {
             dirB.normalize();
 
             Vec3f P0 = A;
-            Vec3f P1 = A + dirA * (distance * 0.35f);
-            Vec3f P2 = B - dirB * (distance * 0.35f);
             Vec3f P3 = B;
+            Vec3f P1, P2;
+
+            if (curvyLines.get() == 1.0f) {
+                P1 = A + dirA * (distance * 0.35f);
+                P2 = B - dirB * (distance * 0.35f);
+            } else {
+                P1 = A + (B - A) * 0.333f;
+                P2 = A + (B - A) * 0.666f;
+            }
              
             float dist_t = distance / h;
             float math_opacity = 0.5f * (1.0f - dist_t); 
@@ -432,24 +587,21 @@ struct AlloApp : DistributedAppWithState<WorldState> {
       g.blendAdd();
     }
     
-    // 2. DRAW PARTICLES OR 3D BUBBLES
+    // RESTORED: Custom pipeline bindings back into render loop
     if (enableBubbles.get() == 1.0f) {
       g.shader(bubbleShader); 
       g.blending(true);
       g.blendTrans();    
-      g.depthTesting(true); 
+      g.depthTesting(false); 
       g.cullFace(false);
 
       float b_size = bubbleSize.get();
-      
-      for (int i = 0; i < N; i++) {
+      for (int i = 0; i < current_N; i++) {
         g.pushMatrix();
         g.translate(mesh.vertices()[i]);
         g.scale(b_size);
-        
         Color c = mesh.colors()[i];
-        g.color(c.r, c.g, c.b, 0.3f); 
-        
+        g.shader().uniform("al_Color", c.r, c.g, c.b, 0.3f); 
         g.draw(sphereMesh); 
         g.popMatrix();
       }
@@ -460,7 +612,17 @@ struct AlloApp : DistributedAppWithState<WorldState> {
       g.depthTesting(false);
       g.shader(pointShader);
       g.shader().uniform("pointSize", pointSize.get() / 100.0f);
+      
+      vector<Vec3f> original_pos(MAX_N);
+      for(int i = current_N; i < MAX_N; i++) {
+          original_pos[i] = mesh.vertices()[i];
+          mesh.vertices()[i].set(99999.0f, 99999.0f, 99999.0f);
+      }
+      
       g.draw(mesh);
+      for(int i = current_N; i < MAX_N; i++) {
+          mesh.vertices()[i] = original_pos[i];
+      }
     }
   }
 };
@@ -473,10 +635,17 @@ int main() {
 
 string slurp(string fileName) {
   fstream file(fileName);
+  if (!file.is_open()) {
+    std::cout << "\n🚨 ERROR: slurp() COULD NOT FIND OR OPEN FILE: " << fileName << std::endl;
+    return "";
+  }
   string returnValue = "";
   while (file.good()) {
     string line;
     getline(file, line);
+    if (!line.empty() && line[line.length() - 1] == '\r') {
+      line.erase(line.length() - 1);
+    }
     returnValue += line + "\n";
   }
   return returnValue;
