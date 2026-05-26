@@ -84,12 +84,36 @@ struct WorldState {
   Color color[MAX_N];
 };
 
+// --- KEYFRAME STRUCT WITH ALL PARAMETERS ---
 struct Keyframe {
     string name;
     float duration;
-    float focalDepth, springLength;
     Vec3f pos;
     Quatf rot;
+    
+    // Sliders
+    int activeParticles;
+    int maxRibbons;
+    float pointSize;
+    float timeStep;
+    float dragFactor;
+    float springStiffness;
+    float springLength;
+    float focalDepth;
+    float perceptionRadius;
+    float repulsionStrength;
+    float desiredPersonalSpace;
+    float viscosity;
+    float bubbleSize;
+
+    // Toggles
+    float enableSpring;
+    float springToOrigin;
+    float enableSwarm;
+    float enableWarp;
+    float enableRibbons;
+    float curvyLines;
+    float enableBubbles;
 };
 
 class Timeline {
@@ -99,59 +123,99 @@ public:
     float timer = 0.0f;
     bool active = false;
 
-    void save(const string& filename, const string& name, float dur, float fd, float sl, const Vec3f& p, const Quatf& r) {
+    // --- SAVE FUNCTION ---
+    void save(const string& filename, const string& name, float dur, const Vec3f& p, const Quatf& r,
+              int ap, int mr, float ps, float ts, float df, float ss, float sl, float fd, float pr, float rs, float dps, float v, float bs,
+              float es, float sto, float esw, float ew, float er, float cl, float eb) {
         ofstream file(filename, ios::app);
         file << "{ name: " << name << ", duration: " << dur 
-             << ", focalDepth: " << fd << ", springLength: " << sl 
              << ", posX: " << p.x << ", posY: " << p.y << ", posZ: " << p.z 
              << ", rotW: " << r.w << ", rotX: " << r.x << ", rotY: " << r.y << ", rotZ: " << r.z 
+             << ", activeParticles: " << ap << ", maxRibbons: " << mr << ", pointSize: " << ps 
+             << ", timeStep: " << ts << ", dragFactor: " << df << ", springStiffness: " << ss 
+             << ", springLength: " << sl << ", focalDepth: " << fd << ", perceptionRadius: " << pr 
+             << ", repulsionStrength: " << rs << ", desiredPersonalSpace: " << dps << ", viscosity: " << v 
+             << ", bubbleSize: " << bs << ", enableSpring: " << es << ", springToOrigin: " << sto 
+             << ", enableSwarm: " << esw << ", enableWarp: " << ew << ", enableRibbons: " << er 
+             << ", curvyLines: " << cl << ", enableBubbles: " << eb 
              << " }" << endl;
     }
 
     float getValue(string line, string key) {
-        size_t pos = line.find(key + ":");
+        size_t pos = line.find(key + ":"); 
         if (pos == string::npos) return 0.0f;
-        string sub = line.substr(pos + key.length() + 1);
+        string sub = line.substr(pos + key.length() + 1); 
         return stof(sub);
     }
 
+    // --- LOAD FUNCTION ---
     void load(const string& filename) {
         events.clear();
         ifstream file(filename);
+        if (!file.is_open()) {
+            std::cout << "⚠️ TIMELINE NOTICE: Could not open " << filename << " for reading." << std::endl;
+            return;
+        }
         string line;
+        int count = 0;
         while (getline(file, line)) {
             if (line.find("{") != string::npos) {
                 Keyframe k;
                 k.duration = getValue(line, "duration");
-                k.focalDepth = getValue(line, "focalDepth");
-                k.springLength = getValue(line, "springLength");
                 k.pos = Vec3f(getValue(line, "posX"), getValue(line, "posY"), getValue(line, "posZ"));
                 k.rot = Quatf(getValue(line, "rotW"), getValue(line, "rotX"), getValue(line, "rotY"), getValue(line, "rotZ"));
+                
+                // Sliders
+                k.activeParticles = (int)getValue(line, "activeParticles");
+                k.maxRibbons = (int)getValue(line, "maxRibbons");
+                k.pointSize = getValue(line, "pointSize");
+                k.timeStep = getValue(line, "timeStep");
+                k.dragFactor = getValue(line, "dragFactor");
+                k.springStiffness = getValue(line, "springStiffness");
+                k.springLength = getValue(line, "springLength");
+                k.focalDepth = getValue(line, "focalDepth");
+                k.perceptionRadius = getValue(line, "perceptionRadius");
+                k.repulsionStrength = getValue(line, "repulsionStrength");
+                k.desiredPersonalSpace = getValue(line, "desiredPersonalSpace");
+                k.viscosity = getValue(line, "viscosity");
+                k.bubbleSize = getValue(line, "bubbleSize");
+
+                // Toggles
+                k.enableSpring = getValue(line, "enableSpring");
+                k.springToOrigin = getValue(line, "springToOrigin");
+                k.enableSwarm = getValue(line, "enableSwarm");
+                k.enableWarp = getValue(line, "enableWarp");
+                k.enableRibbons = getValue(line, "enableRibbons");
+                k.curvyLines = getValue(line, "curvyLines");
+                k.enableBubbles = getValue(line, "enableBubbles");
+
                 events.push_back(k);
+                count++;
             }
         }
+        std::cout << "✅ TIMELINE SUCCESS: Loaded " << count << " complete keyframe profiles from " << filename << std::endl;
     }
 };
 
 struct AlloApp : DistributedAppWithState<WorldState> {
-  // GUI Parameters
+  // GUI Parameters (Constructors explicitly declare slider min/max boundaries)
   ParameterInt activeParticles{"Active Particles", "", 100, 10, MAX_N};
   ParameterInt maxRibbons{"Max Ribbons", "", 10, 1, 25};
 
-  Parameter pointSize{"Point Size", "", 4.5, 1.0, 10.0};
-  Parameter timeStep{"Time Step", "", 0.3, 0.01, 0.6};
-  Parameter dragFactor{"Drag Factor", "", 0.7, 0.0, 0.9};
+  Parameter pointSize{"Point Size", "", 4.5f, 1.0f, 10.0f};
+  Parameter timeStep{"Time Step", "", 0.3f, 0.01f, 0.6f};
+  Parameter dragFactor{"Drag Factor", "", 0.7f, 0.0f, 0.9f};
 
-  Parameter springStiffness {"Spring Stiffness", 0.1, 0.0, 0.9};
-  Parameter springLength    {"Spring Length", 6, 0, 50};
-  Parameter focalDepth      {"Focal Depth", 10.0, -10.0, 100.0};
+  Parameter springStiffness {"Spring Stiffness", "", 0.1f, 0.0f, 0.9f};
+  Parameter springLength    {"Spring Length", "", 6.0f, 0.0f, 50.0f};
+  Parameter focalDepth      {"Focal Depth", "", 10.0f, -10.0f, 100.0f};
 
-  Parameter perceptionRadius    {"Perception Radius", 3.2, 0.5, 20.0}; 
-  Parameter repulsionStrength   {"Repulsion Strength", 42.0, 1.0, 100.0};    
-  Parameter desiredPersonalSpace{"Personal Space", 5.5, 1.0, 20.0};     
-  Parameter viscosity           {"Viscosity", 1.4, 0.0, 10.0};
+  Parameter perceptionRadius    {"Perception Radius", "", 3.2f, 0.5f, 20.0f}; 
+  Parameter repulsionStrength   {"Repulsion Strength", "", 42.0f, 1.0f, 100.0f};    
+  Parameter desiredPersonalSpace{"Personal Space", "", 5.5f, 1.0f, 20.0f};     
+  Parameter viscosity           {"Viscosity", "", 1.4f, 0.0f, 10.0f};
 
-  Parameter bubbleSize          {"Bubble Size", 1.5, 0.01, 5.0};
+  Parameter bubbleSize          {"Bubble Size", "", 1.5f, 0.01f, 5.0f};
   
   ParameterBool enableSpring  {"Enable Spring", "", 1.0f};
   ParameterBool springToOrigin{"Spring Center to Origin", "", 0.0f};
@@ -161,8 +225,20 @@ struct AlloApp : DistributedAppWithState<WorldState> {
   ParameterBool curvyLines    {"Curvy Lines", "", 1.0f}; 
   ParameterBool enableBubbles {"Enable Bubbles", "", 1.0f};
   
-  ParameterBool startAutomation{"Start Automation", "", 0.0f};
   ParameterBool saveKeyframe{"Save Keyframe", "", 0.0f};
+
+  // Advanced Timeline Actions & Telemetry
+  ParameterBool playAutomation{"Play Automation", "Controls", 0.0f};
+  ParameterBool pauseAutomation{"Pause Automation", "Controls", 0.0f};
+  ParameterBool stopAutomation{"Stop Automation", "Controls", 0.0f};
+  
+  ParameterInt currentFrameNum{"Current Frame Index", "Status", 0, 0, 100};
+  ParameterString timelineStatus{"Timeline Status", "Status", "Stopped"};
+  ParameterVec3 cameraPosDisplay{"Camera Position (XYZ)", "Status", Vec3f(0.0f)};
+
+  Parameter transitionSpeed{"Transition Speed Factor", "Controls", 1.0f, 0.1f, 10.0f};
+  Parameter holdDuration{"Keyframe Hold Time (sec)", "Controls", 2.0f, 0.0f, 10.0f};
+  ParameterString sequencingPhase{"Current Sequence Phase", "Status", "Idle"};
 
   ShaderProgram pointShader;
   ShaderProgram bubbleShader; 
@@ -176,11 +252,6 @@ struct AlloApp : DistributedAppWithState<WorldState> {
   vector<float> mass;
 
   void onInit() override {
-    // auto cuttleboneDomain = CuttleboneStateSimulationDomain<WorldState>::enableCuttlebone(this);
-    // if (!cuttleboneDomain) {
-    //   std::cerr << "WARNING: Cuttlebone failed to start. Running local mode fallback." << std::endl;
-    // }
-
     if (isPrimary()) {
         auto GUIdomain = GUIDomain::enableGUI(defaultWindowDomain());
         auto &gui = GUIdomain->newGUI();
@@ -205,10 +276,19 @@ struct AlloApp : DistributedAppWithState<WorldState> {
         gui.add(enableRibbons);
         gui.add(curvyLines); 
         gui.add(enableBubbles);
-        gui.add(startAutomation);
         gui.add(saveKeyframe);
+
+        gui.add(playAutomation);
+        gui.add(pauseAutomation);
+        gui.add(stopAutomation);
+        gui.add(transitionSpeed);  
+        gui.add(holdDuration);     
+        gui.add(currentFrameNum);
+        gui.add(timelineStatus);
+        gui.add(sequencingPhase);  
+        gui.add(cameraPosDisplay);
         
-        timeline.load("events.txt");
+        timeline.load("../events.txt");
     }
 
     parameterServer() << pointSize << timeStep << dragFactor << springStiffness 
@@ -216,11 +296,12 @@ struct AlloApp : DistributedAppWithState<WorldState> {
                       << repulsionStrength << desiredPersonalSpace << viscosity 
                       << bubbleSize << enableSpring << springToOrigin 
                       << enableSwarm << enableWarp << enableRibbons 
-                      << enableBubbles << startAutomation << saveKeyframe;
+                      << enableBubbles << saveKeyframe
+                      << playAutomation << pauseAutomation << stopAutomation
+                      << transitionSpeed << holdDuration;
   }
 
   void onCreate() override {
-    // RESTORED: Loading your custom shaders using the slurp function paths
     pointShader.compile(slurp("../point-vertex.glsl"),
                         slurp("../point-fragment.glsl"),
                         slurp("../point-geometry.glsl"));
@@ -255,6 +336,7 @@ struct AlloApp : DistributedAppWithState<WorldState> {
   }
   
   bool freeze = false;
+  bool isHolding = false; 
 
   void onAnimate(double dt) override {
     if (!isPrimary()) return;
@@ -264,28 +346,138 @@ struct AlloApp : DistributedAppWithState<WorldState> {
 
     if (freeze) return;
 
-    // --- 1. AUTOMATION LOGIC ---
-    if (startAutomation.get()) {
-        timeline.active = !timeline.active;
-        startAutomation.set(0); 
+    cameraPosDisplay.set(nav().pos());
+
+    // --- 1. PLAYBACK CONTROLLERS ---
+    if (playAutomation.get()) {
+        timeline.active = true;
+        timelineStatus.set("Playing");
+        playAutomation.set(0); 
+    }
+    if (pauseAutomation.get()) {
+        timeline.active = false;
+        timelineStatus.set("Paused");
+        sequencingPhase.set("Paused");
+        pauseAutomation.set(0); 
+    }
+    if (stopAutomation.get()) {
+        timeline.active = false;
+        timeline.currentIndex = 0;
+        timeline.timer = 0.0f;
+        isHolding = false;
+        timelineStatus.set("Stopped");
+        sequencingPhase.set("Stopped");
+        currentFrameNum.set(0);
+        
+        if (!timeline.events.empty()) {
+            Keyframe& first = timeline.events[0];
+            nav().pos().set(first.pos);
+            nav().quat().set(first.rot);
+            activeParticles.set(first.activeParticles);
+            maxRibbons.set(first.maxRibbons);
+            pointSize.set(first.pointSize);
+            timeStep.set(first.timeStep);
+            dragFactor.set(first.dragFactor);
+            springStiffness.set(first.springStiffness);
+            springLength.set(first.springLength);
+            focalDepth.set(first.focalDepth);
+            perceptionRadius.set(first.perceptionRadius);
+            repulsionStrength.set(first.repulsionStrength);
+            desiredPersonalSpace.set(first.desiredPersonalSpace);
+            viscosity.set(first.viscosity);
+            bubbleSize.set(first.bubbleSize);
+            enableSpring.set(first.enableSpring);
+            springToOrigin.set(first.springToOrigin);
+            enableSwarm.set(first.enableSwarm);
+            enableWarp.set(first.enableWarp);
+            enableRibbons.set(first.enableRibbons);
+            curvyLines.set(first.curvyLines);
+            enableBubbles.set(first.enableBubbles);
+        }
+        stopAutomation.set(0); 
     }
 
+    // --- 2. ADVANCED TWO-PHASE INTERPOLATION TIMELINE ---
     if (timeline.active && !timeline.events.empty()) {
         Keyframe& curr = timeline.events[timeline.currentIndex];
         Keyframe& next = timeline.events[(timeline.currentIndex + 1) % timeline.events.size()];
         
-        timeline.timer += dt;
-        float t = timeline.timer / curr.duration;
-        
-        focalDepth.set(curr.focalDepth + (next.focalDepth - curr.focalDepth) * t);
-        springLength.set(curr.springLength + (next.springLength - curr.springLength) * t);
-        
-        nav().pos().lerp(next.pos, t);
-        nav().quat().slerp(next.rot, t);
+        currentFrameNum.set(timeline.currentIndex);
 
-        if (t >= 1.0f) {
-            timeline.currentIndex = (timeline.currentIndex + 1) % timeline.events.size();
-            timeline.timer = 0.0f;
+        // PHASE A: Hold State (Only locks camera position and view configurations)
+        if (isHolding) {
+            sequencingPhase.set("Holding Scene");
+            
+            timeline.timer += dt; 
+            
+            nav().pos().set(curr.pos);
+            nav().quat().set(curr.rot);
+            
+            activeParticles.set(curr.activeParticles);
+            maxRibbons.set(curr.maxRibbons);
+            pointSize.set(curr.pointSize);
+            focalDepth.set(curr.focalDepth);
+            bubbleSize.set(curr.bubbleSize);
+            
+            enableSpring.set(curr.enableSpring);
+            springToOrigin.set(curr.springToOrigin);
+            enableSwarm.set(curr.enableSwarm);
+            enableWarp.set(curr.enableWarp);
+            enableRibbons.set(curr.enableRibbons);
+            curvyLines.set(curr.curvyLines);
+            enableBubbles.set(curr.enableBubbles);
+
+            if (timeline.timer >= holdDuration.get()) {
+                isHolding = false;     
+                timeline.timer = 0.0f; 
+            }
+        }
+        // PHASE B: Transition State (Interpolation Engine)
+        else {
+            sequencingPhase.set("Interpolating Target");
+
+            timeline.timer += dt; 
+
+            float totalTransitionTime = curr.duration * transitionSpeed.get();
+            if (totalTransitionTime < 0.01f) totalTransitionTime = 0.01f; 
+
+            float t = timeline.timer / totalTransitionTime;
+            if (t > 1.0f) t = 1.0f; 
+
+            // Smooth camera movements
+            nav().pos().lerp(next.pos, t);
+            nav().quat().slerp(next.rot, t);
+
+            // Interpolating view properties
+            activeParticles.set(static_cast<int>(curr.activeParticles + (next.activeParticles - curr.activeParticles) * t));
+            maxRibbons.set(static_cast<int>(curr.maxRibbons + (next.maxRibbons - curr.maxRibbons) * t));
+            pointSize.set(curr.pointSize + (next.pointSize - curr.pointSize) * t);
+            focalDepth.set(curr.focalDepth + (next.focalDepth - curr.focalDepth) * t);
+            bubbleSize.set(curr.bubbleSize + (next.bubbleSize - curr.bubbleSize) * t);
+
+            // Physics settings snap forward cleanly to keep forces stable
+            timeStep.set(next.timeStep);
+            dragFactor.set(next.dragFactor);
+            springStiffness.set(next.springStiffness);
+            springLength.set(next.springLength);
+            perceptionRadius.set(next.perceptionRadius);
+            repulsionStrength.set(next.repulsionStrength);
+            desiredPersonalSpace.set(next.desiredPersonalSpace);
+            viscosity.set(next.viscosity);
+
+            enableSpring.set(t < 0.5f ? curr.enableSpring : next.enableSpring);
+            springToOrigin.set(t < 0.5f ? curr.springToOrigin : next.springToOrigin);
+            enableSwarm.set(t < 0.5f ? curr.enableSwarm : next.enableSwarm);
+            enableWarp.set(t < 0.5f ? curr.enableWarp : next.enableWarp);
+            enableRibbons.set(t < 0.5f ? curr.enableRibbons : next.enableRibbons);
+            curvyLines.set(t < 0.5f ? curr.curvyLines : next.curvyLines);
+            enableBubbles.set(t < 0.5f ? curr.enableBubbles : next.enableBubbles);
+
+            if (t >= 1.0f) {
+                timeline.currentIndex = (timeline.currentIndex + 1) % timeline.events.size();
+                timeline.timer = 0.0f;
+                isHolding = true; 
+            }
         }
     }
 
@@ -296,7 +488,7 @@ struct AlloApp : DistributedAppWithState<WorldState> {
 
     int current_N = activeParticles.get();
 
-    // --- 2. PHYSICS ENGINE MODULES ---
+    // --- 3. PHYSICS ENGINE MODULES ---
     if (enableSpring.get() == 1.0f) {
       Vec3f focal_point = (springToOrigin.get() == 1.0f) ? Vec3f(0.0f, 0.0f, 0.0f) : camPos + (uf * focalDepth.get());  
 
@@ -379,12 +571,13 @@ struct AlloApp : DistributedAppWithState<WorldState> {
 
             Vec3f v_diff = velocity[j] - velocity[i];
             float kernel_lap = alignment_weight * (radius - r);
-            
-            float safe_crowding = (avg_crowding > 1.0f) ? avg_crowding : 1.0f;
-            Vec3f alignment_force = v_diff * (friction_factor * avg_mass * kernel_lap / safe_crowding);
-          
+
+            float total_neighbors = (float)(neighbors.size()); 
+            float safe_count = (total_neighbors > 1.0f) ? total_neighbors : 1.0f;
+
+            Vec3f alignment_force = v_diff * (friction_factor * avg_mass * kernel_lap / safe_count);
             Vec3f total_force = (dir * push_mag) + alignment_force;
-            force[i] += total_force;
+            force[i] += total_force; 
             force[j] -= total_force; 
           }
         }
@@ -393,7 +586,7 @@ struct AlloApp : DistributedAppWithState<WorldState> {
     
     for (int i = 0; i < current_N; i++) force[i] += - velocity[i] * dragFactor.get(); 
 
-    // --- 3. NUMERICAL INTEGRATION & SYSTEM COPIES ---
+    // --- 4. NUMERICAL INTEGRATION & CLUSTER STATE COPIES ---
     vector<Vec3f> &position(mesh.vertices());
     for (int i = 0; i < current_N; i++) {
       velocity[i] += force[i] / mass[i] * timeStep.get();
@@ -444,14 +637,22 @@ struct AlloApp : DistributedAppWithState<WorldState> {
         }
     }
 
-    // --- 4. SNAPSHOT KEYFRAME RECORDER ---
+    // --- 5. SNAPSHOT KEYFRAME RECORDER ---
     if (saveKeyframe.get()) {
-        timeline.save("events.txt", "Event", 5.0, focalDepth.get(), springLength.get(), nav().pos(), nav().quat());
-        cout << "Snapshot saved to events.txt" << endl;
+        timeline.save("../events.txt", "Event", 5.0, nav().pos(), nav().quat(),
+                      activeParticles.get(), maxRibbons.get(), pointSize.get(), timeStep.get(), dragFactor.get(),
+                      springStiffness.get(), springLength.get(), focalDepth.get(), perceptionRadius.get(),
+                      repulsionStrength.get(), desiredPersonalSpace.get(), viscosity.get(), bubbleSize.get(),
+                      enableSpring.get(), springToOrigin.get(), enableSwarm.get(), enableWarp.get(),
+                      enableRibbons.get(), curvyLines.get(), enableBubbles.get());
+                      
+        cout << "Snapshot saved cleanly to repository root level events.txt" << endl;
+        
+        timeline.load("../events.txt");
         saveKeyframe.set(0); 
     }
 
-    // --- 5. CLUSTER STATE FINALIZATION ---
+    // --- 6. CLUSTER STATE FINALIZATION ---
     for (auto &a : force) a.set(0); 
     for (int i = 0; i < current_N; i++) state().position[i] = mesh.vertices()[i];
     state().camera.set(nav());  
@@ -574,7 +775,7 @@ struct AlloApp : DistributedAppWithState<WorldState> {
                 
                 ribbons.vertex(v0);      ribbons.color(c);
                 ribbons.vertex(prev_v1); ribbons.color(c);
-                ribbons.vertex(v1);      ribbons.color(c);
+                ribbons.vertex(v1);      ribbons.color(c); 
               }
               prev_v0 = v0;
               prev_v1 = v1;
@@ -587,7 +788,6 @@ struct AlloApp : DistributedAppWithState<WorldState> {
       g.blendAdd();
     }
     
-    // RESTORED: Custom pipeline bindings back into render loop
     if (enableBubbles.get() == 1.0f) {
       g.shader(bubbleShader); 
       g.blending(true);
