@@ -282,6 +282,7 @@ struct AlloApp : DistributedAppWithState<WorldState> {
 
   ShaderProgram pointShader;
   ShaderProgram bubbleShader; 
+  ShaderProgram ribbonShader;
 
   Mesh mesh;
   Mesh sphereMesh; 
@@ -348,6 +349,9 @@ struct AlloApp : DistributedAppWithState<WorldState> {
                         
     bubbleShader.compile(slurp("../bubble-vertex.glsl"),
                          slurp("../bubble-fragment.glsl"));
+
+    ribbonShader.compile(slurp("../ribbon-vertex.glsl"),
+                         slurp("../ribbon-fragment.glsl"));
 
     addSphere(sphereMesh, 1.0, 32, 32);
     sphereMesh.generateNormals(); 
@@ -755,11 +759,12 @@ struct AlloApp : DistributedAppWithState<WorldState> {
     g.meshColor(); 
 
     if (state().syncEnableRibbons) {
+
       Mesh ribbons;
       ribbons.primitive(Mesh::TRIANGLES);
 
       float h = perceptionRadius.get(); 
-      float line_thickness = 0.02f; 
+      float line_thickness = 0.05f; 
       int segments = state().syncCurvyLines ? 8 : 1; 
 
       SpatialHash drawGrid;
@@ -799,9 +804,11 @@ struct AlloApp : DistributedAppWithState<WorldState> {
                 P1 = A + (B - A) * 0.333f;
                 P2 = A + (B - A) * 0.666f;
             }
-             
+            
             float dist_t = distance / h;
-            float math_opacity = 0.5f * (1.0f - dist_t); 
+            float math_opacity = 0.8f * (1.0f - dist_t)+0.15f; 
+            math_opacity = std::max(0.0f, std::min(math_opacity, 1.0f));//clamping the value
+            
             float r_color = std::min(2.0f * dist_t, 1.0f);
             float g_color = std::min(2.0f * (1.0f - dist_t), 1.0f);
             Color c(r_color, g_color, 0.0f, math_opacity);
@@ -826,15 +833,19 @@ struct AlloApp : DistributedAppWithState<WorldState> {
               Vec3f offset = right * line_thickness;
               Vec3f v0 = p + offset;
               Vec3f v1 = p - offset;
+        
 
               if (k > 0) {
-                ribbons.vertex(prev_v0); ribbons.color(c);
-                ribbons.vertex(prev_v1); ribbons.color(c);
-                ribbons.vertex(v0);      ribbons.color(c);
+              float prev_t = (float)(k - 1) / segments;
+              float curr_t = (float)k / segments;
+
+                ribbons.vertex(prev_v0); ribbons.color(c); ribbons.texCoord(prev_t, -1.0f);
+                ribbons.vertex(prev_v1); ribbons.color(c); ribbons.texCoord(prev_t,  1.0f);
+                ribbons.vertex(v0);      ribbons.color(c); ribbons.texCoord(curr_t, -1.0f);
                 
-                ribbons.vertex(v0);      ribbons.color(c);
-                ribbons.vertex(prev_v1); ribbons.color(c);
-                ribbons.vertex(v1);      ribbons.color(c); 
+                ribbons.vertex(v0);      ribbons.color(c); ribbons.texCoord(curr_t, -1.0f);
+                ribbons.vertex(prev_v1); ribbons.color(c); ribbons.texCoord(prev_t,  1.0f);
+                ribbons.vertex(v1);      ribbons.color(c); ribbons.texCoord(curr_t,  1.0f);
               }
               prev_v0 = v0;
               prev_v1 = v1;
@@ -842,7 +853,11 @@ struct AlloApp : DistributedAppWithState<WorldState> {
           }
         }
       }
-      
+
+      g.shader(ribbonShader);
+      g.shader().uniform("lightIntensity", state().syncEnableBubbles ? 1.8f : 0.5f);
+      g.shader().uniform("iTime", static_cast<float>(state().time));
+
       g.draw(ribbons); 
       g.blendAdd();
     }
