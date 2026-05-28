@@ -2,52 +2,51 @@
 
 in vec4 vColor;
 in vec3 vWorldPos;
-in vec2 uv; // uv.x = length parameter (0.0 to 1.0), uv.y = width parameter (-1.0 to 1.0)
+in vec2 uv; // uv.x = length (0.0 to 1.0), uv.y = width (-1.0 to 1.0)
 
 out vec4 fragColor;
 
-uniform float isSwarming;
-uniform float bubbleModifier;
+uniform float lightIntensity;
 
 void main() {
-    // Distance tracking parameters
-    float widthDist = abs(uv.y);       // 0.0 at center line, 1.0 at lateral edges
-    float lengthDistStart = uv.x;       // 0.0 at the absolute start of the segment
-    float lengthDistEnd = 1.0 - uv.x;   // 0.0 at the absolute end of the segment
+    float edgeDist = abs(uv.y);
 
-    // 1. ELIMINATE UGLY JOINTS AND CANCELLATIONS
-    // To smooth out the right angles, we calculate a continuous roundness coefficient.
-    // If we are near the terminal tips, we smoothly pull the edges inward.
-    float jointCap = smoothstep(0.0, 0.08, lengthDistStart) * smoothstep(0.0, 0.08, lengthDistEnd);
+    // 1. COLLECT BASE DISTANCE COLOR FROM C++
+    vec3 baseColor = vColor.rgb * lightIntensity;
 
-    // 2. FRESNEL-LIKE TRANSLUCENCY PROFILE
-    // Real spider silk has a soft, see-through core and highly reflective edges.
-    // We shape the body opacity so the center is faint, but the density swells toward the boundaries.
-    float silkBodyOpacity = mix(0.25, 0.65, smoothstep(0.0, 0.85, widthDist));
+    // 2. CYLINDRICAL CORE MATH (Slightly narrowed to keep lines elegant)
+    float silkCore = exp(-pow(edgeDist * 3.0, 2.0));
+    float softSheen = pow(1.0 - edgeDist, 1.5);
 
-    // 3. SILK EDGE GLINT (Boosted Back-Scattering for legibility)
-    // To make sure it doesn't get lost on the low-resolution sphere projection,
-    // we expand the edge glint profile slightly and boost its base exposure.
-    float edgeGlint = pow(smoothstep(0.70, 0.98, widthDist), 6.0);
+    // 3. CONVERGENCE TAPER (The Hotspot Dimmer)
+    // Generates a smooth falloff factor that dips near the terminal endpoints (0.0 and 1.0).
+    // This allows the ribbon to be vibrant and fully opaque in open air spaces, 
+    // but dims it smoothly right as it enters the crowded convergence hubs.
+    float hubDampener = smoothstep(0.0, 0.15, uv.x) * smoothstep(0.0, 0.15, 1.0 - uv.x);
 
-    // 4. COLOR AND LIGHT INTENSITY MIXING
-    // Inject structural white into the highlight zones while keeping your height-gradient intact
-    vec3 silkColor = vColor.rgb * (1.1 + isSwarming * 0.3);
-    vec3 specularHighlight = vec3(0.96, 0.98, 1.0);
-    vec3 finalRGB = mix(silkColor, specularHighlight, edgeGlint * 0.7);
+    // 4. COLOR MODULATION WITH EXPOSURE CONTROL
+    // We heavily dim the white glare accent down to a tiny 0.05 scaling factor,
+    // and route the main brightness through the dampener to limit additive overdrive.
+    vec3 coreHighlight = baseColor * 1.2; 
+    vec3 animatedRGB = mix(baseColor * softSheen, coreHighlight, silkCore);
+    
+    // Tiny, heavily restrained glint at the absolute center
+    animatedRGB += vec3(0.8, 0.9, 1.0) * silkCore * 0.05;
+    
+    // Apply the hub dampener directly to the RGB intensity to prevent white clipping
+    animatedRGB *= mix(0.4, 1.0, hubDampener);
 
-    // 5. COMPOSITE FINAL OPACITY CHAINS WITH ANTI-ALIASING
-    // Apply the jointCap mask to round off the terminal edges completely.
-    float baseAlpha = max(silkBodyOpacity, edgeGlint * 1.5);
-    float finalAlpha = baseAlpha * vColor.a * jointCap;
+    // 5. JOINT TERMINATIONS AND ALPHA PASS
+    float jointCap = smoothstep(0.0, 0.05, uv.x) * smoothstep(0.0, 0.05, 1.0 - uv.x);
 
-    // Smooth feathering right at the sub-pixel geometric boundary to wipe out jagged aliasing
-    float boundaryFade = smoothstep(1.0, 0.88, widthDist);
-    finalAlpha *= boundaryFade;
+    // Scale the alpha with the hub dampener to thin out the geometry at the cluster center
+    float finalAlpha = (softSheen * 0.4 + silkCore * 0.6) * vColor.a * jointCap * mix(0.5, 1.0, hubDampener);
+    finalAlpha = max(finalAlpha, silkCore * 0.15 * jointCap * hubDampener);
 
-    // Reject pixels that are completely transparent to keep the depth testing clean
+    // Sub-pixel edge anti-aliasing feathering step
+    finalAlpha *= smoothstep(1.0, 0.85, edgeDist);
+
     if (finalAlpha < 0.005) discard;
 
- 
-    fragColor = vec4(finalRGB, finalAlpha);
+    fragColor = vec4(animatedRGB, finalAlpha);
 }

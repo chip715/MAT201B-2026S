@@ -1,19 +1,19 @@
 #version 400 core
 
-layout (location = 0) in vec3 vertexPosition;
-layout (location = 1) in vec4 vertexColor;
-layout (location = 2) in vec3 vertexVelocity;
-
-out vec3 vVelocity;
-out vec4 vColor;
-out vec3 vWorldPos;
-
 uniform mat4 al_ModelViewMatrix;
 uniform mat4 al_ProjectionMatrix;
 
+layout(location = 0) in vec3 position;
+layout(location = 3) in vec3 normal; // RESTORED: The correct AlloLib normal slot
+
+out vec3 vNormal;
+out vec3 vViewDir;
+
 void main() {
-    vVelocity = vertexVelocity;
-    vColor = vertexColor;
-    vWorldPos = vertexPosition;
-    gl_Position = al_ProjectionMatrix * al_ModelViewMatrix * vec4(vertexPosition, 1.0);
+    vec4 eyePos = al_ModelViewMatrix * vec4(position, 1.0);
+    gl_Position = al_ProjectionMatrix * eyePos;
+
+    // Transform normals cleanly in view space
+    vNormal = normalize(mat3(al_ModelViewMatrix) * normal);
+    vViewDir = normalize(-eyePos.xyz);
 }
