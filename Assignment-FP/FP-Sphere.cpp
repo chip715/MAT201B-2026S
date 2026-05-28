@@ -293,6 +293,7 @@ struct AlloApp : DistributedAppWithState<WorldState> {
   vector<float> mass;
 
   void onInit() override {
+    
     if (isPrimary()) {
         auto GUIdomain = GUIDomain::enableGUI(defaultWindowDomain());
         auto &gui = GUIdomain->newGUI();

@@ -1,5 +1,6 @@
 // Karl Yerkes
 // 2022-01-20
+#define CUTTLEBONE_SKIP_POD_CHECK 1
 
 #include "al/app/al_DistributedApp.hpp"
 #include "al/app/al_GUIDomain.hpp"
@@ -292,6 +293,12 @@ struct AlloApp : DistributedAppWithState<WorldState> {
   vector<float> mass;
 
   void onInit() override {
+
+    auto cuttleboneDomain = CuttleboneStateSimulationDomain<WorldState>::enableCuttlebone(this);
+    if (!cuttleboneDomain) {
+      std::cerr << "WARNING: Cuttlebone failed to start. Running local mode fallback." << std::endl;
+    }
+    
     if (isPrimary()) {
         auto GUIdomain = GUIDomain::enableGUI(defaultWindowDomain());
         auto &gui = GUIdomain->newGUI();
