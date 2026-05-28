@@ -1,6 +1,6 @@
 // Karl Yerkes
 // 2022-01-20
-// Upgraded: Native PresetHandler & PresetSequencer Architecture with Full Parameter Capturing
+// Upgraded: Native PresetHandler & SequenceRecorder Camera Fix
 
 #include "al/app/al_DistributedApp.hpp"
 #include "al/app/al_GUIDomain.hpp"
@@ -111,44 +111,45 @@ struct AlloApp : DistributedAppWithState<WorldState> {
   //=================================================================
   // SIMULATION PARAMETERS
   //=================================================================
-  ParameterInt activeParticles{"Active Particles", "", 279, 10, MAX_N};
-  Parameter pointSize       {"Point Size", "", 4.083f, 1.0f, 10.0f};
-  Parameter timeStep        {"Time Step", "", 0.136f, 0.01f, 0.6f};
-  Parameter dragFactor      {"Drag Factor", "", 0.700f, 0.0f, 0.9f};
-  ParameterBool enableWarp  {"Enable Warp", "", 0.0f};
+  ParameterInt activeParticles{"Active_Particles", "", 279, 10, MAX_N};
+  Parameter pointSize       {"Point_Size", "", 4.083f, 1.0f, 10.0f};
+  Parameter timeStep        {"Time_Step", "", 0.136f, 0.01f, 0.6f};
+  Parameter dragFactor      {"Drag_Factor", "", 0.700f, 0.0f, 0.9f};
+  ParameterBool enableWarp  {"Enable_Warp", "", 0.0f};
 
-  ParameterBool enableClamp   {"Enable Distance Clamp", "", 0.0f};
+  ParameterBool enableClamp   {"Enable_Distance_Clamp", "", 0.0f};
 
-  ParameterBool enableOrbit   {"Enable Orbit", "", 1.0f};
-  ParameterBool orbitAroundOrigin{"Orbit Around Origin", "", 1.0f};
-  Parameter orbitSpeed        {"Orbit Speed", "", 0.034f, -15.0f, 15.0f};
-  Parameter orbitAxisX        {"Orbit Axis X", "", -0.880f, -1.0f, 1.0f};
-  Parameter orbitAxisY        {"Orbit Axis Y", "", -0.402f, -1.0f, 1.0f};
-  Parameter orbitAxisZ        {"Orbit Axis Z", "", 1.000f, -1.0f, 1.0f};
-  ParameterString orbitStatusText{"Orbit Center Status", "", "Orbit center: Origin"};
+  ParameterBool enableOrbit   {"Enable_Orbit", "", 1.0f};
+  ParameterBool orbitAroundOrigin{"Orbit_Around_Origin", "", 1.0f};
+  ParameterBool orbitAroundCamera{"Orbit_Around_Camera", "", 0.0f}; 
+  Parameter orbitSpeed        {"Orbit_Speed", "", 0.034f, -15.0f, 15.0f};
+  Parameter orbitAxisX        {"Orbit_Axis_X", "", -0.880f, -1.0f, 1.0f};
+  Parameter orbitAxisY        {"Orbit_Axis_Y", "", -0.402f, -1.0f, 1.0f};
+  Parameter orbitAxisZ        {"Orbit_Axis_Z", "", 1.000f, -1.0f, 1.0f};
+  ParameterString orbitStatusText{"Orbit_Center_Status", "", "Orbit center: Origin"};
 
-  ParameterBool enableBubbles {"Enable Bubbles", "", 1.0f};  
-  Parameter bubbleSize       {"Bubble Size", "", 1.673f, 0.01f, 5.0f};
-  ParameterBool enableRibbons{"Enable Ribbons", "", 1.0f};
-  ParameterBool curvyLines   {"Curvy Lines", "", 1.0f}; 
-  ParameterInt maxRibbons    {"Max Ribbons", "", 10, 1, 25};
+  ParameterBool enableBubbles {"Enable_Bubbles", "", 1.0f};  
+  Parameter bubbleSize       {"Bubble_Size", "", 1.673f, 0.01f, 5.0f};
+  ParameterBool enableRibbons{"Enable_Ribbons", "", 1.0f};
+  ParameterBool curvyLines   {"Curvy_Lines", "", 1.0f}; 
+  ParameterInt maxRibbons    {"Max_Ribbons", "", 10, 1, 25};
 
-  ParameterBool enableSpring   {"Enable Spring", "", 1.0f};
-  ParameterBool springToOrigin {"Spring Center to Origin", "", 1.0f};
-  ParameterBool springToCamera {"Spring Center to Camera", "", 0.0f};
-  ParameterBool pinSpringToFront{"Pin Spring to Camera Front", "", 0.0f};
-  Parameter springStiffness    {"Spring Stiffness", "", 0.718f, 0.0f, 0.9f};
-  Parameter springLength       {"Spring Length", "", 16.437f, 0.0f, 50.0f};
-  Parameter focalDepth         {"Focal Depth", "", 45.632f, -10.0f, 100.0f};
-  ParameterString springStatusText{"Spring Center Status", "", "Spring center: origin"};
+  ParameterBool enableSpring   {"Enable_Spring", "", 1.0f};
+  ParameterBool springToOrigin {"Spring_Center_to_Origin", "", 1.0f};
+  ParameterBool springToCamera {"Spring_Center_to_Camera", "", 0.0f};
+  ParameterBool pinSpringToFront{"Pin_Spring_to_Camera_Front", "", 0.0f};
+  Parameter springStiffness    {"Spring_Stiffness", "", 0.718f, 0.0f, 0.9f};
+  Parameter springLength       {"Spring_Length", "", 16.437f, 0.0f, 50.0f};
+  Parameter focalDepth         {"Focal_Depth", "", 45.632f, -10.0f, 100.0f};
+  ParameterString springStatusText{"Spring_Center_Status", "", "Spring center: origin"};
   
-  ParameterBool enableSwarm     {"Enable Swarm", "", 1.0f};
-  Parameter perceptionRadius    {"Perception Radius", "", 15.786f, 0.5f, 20.0f}; 
-  Parameter repulsionStrength   {"Repulsion Strength", "", 48.793f, 1.0f, 100.0f};    
-  Parameter desiredPersonalSpace{"Personal Space", "", 5.500f, 1.0f, 20.0f};     
+  ParameterBool enableSwarm     {"Enable_Swarm", "", 1.0f};
+  Parameter perceptionRadius    {"Perception_Radius", "", 15.786f, 0.5f, 20.0f}; 
+  Parameter repulsionStrength   {"Repulsion_Strength", "", 48.793f, 1.0f, 100.0f};    
+  Parameter desiredPersonalSpace{"Personal_Space", "", 5.500f, 1.0f, 20.0f};     
   Parameter viscosity           {"Viscosity", "", 1.400f, 0.0f, 10.0f};
 
-  ParameterPose cameraPose{"Camera Pose", ""};
+  ParameterPose cameraPose{"Camera_Pose", ""};
 
   //=================================================================
   // NATIVE ALLOLIB PRESET ARCHITECTURE
@@ -173,7 +174,6 @@ struct AlloApp : DistributedAppWithState<WorldState> {
         auto GUIdomain = GUIDomain::enableGUI(defaultWindowDomain());
         auto &gui = GUIdomain->newGUI();
 
-        // 1. General Controls
         gui.add(activeParticles);
         gui.add(pointSize); 
         gui.add(timeStep);   
@@ -181,23 +181,21 @@ struct AlloApp : DistributedAppWithState<WorldState> {
         gui.add(enableWarp);
         gui.add(enableClamp);
 
-        // 2. Orbit Controls
         gui.add(enableOrbit);
         gui.add(orbitAroundOrigin);
+        gui.add(orbitAroundCamera); 
         gui.add(orbitSpeed);
         gui.add(orbitAxisX);
         gui.add(orbitAxisY);
         gui.add(orbitAxisZ);
         gui.add(orbitStatusText);
 
-        // 3. Ribbon Structure Controls
         gui.add(enableBubbles);  
         gui.add(bubbleSize);
         gui.add(enableRibbons);
         gui.add(curvyLines); 
         gui.add(maxRibbons);
 
-        // 4. Spring Settings Controls
         gui.add(enableSpring);
         gui.add(springToOrigin);
         gui.add(springToCamera);
@@ -207,34 +205,30 @@ struct AlloApp : DistributedAppWithState<WorldState> {
         gui.add(focalDepth);
         gui.add(springStatusText);
 
-        // 5. Fluids Swarm Settings Controls
         gui.add(enableSwarm);
         gui.add(perceptionRadius);
         gui.add(repulsionStrength);
         gui.add(desiredPersonalSpace);
         gui.add(viscosity);
 
-        // 6. Automation Systems Controls
         gui.add(cameraPose);
         gui << presetHandler; 
         gui << sequencer;    
         gui << recorder;     
     }
 
-    // ALL FLAT PARAMETERS COHERENTLY STREAMED INTO ALLOLIB BACKEND
     presetHandler << activeParticles << pointSize << timeStep << dragFactor << enableWarp << enableClamp
-                  << enableOrbit << orbitAroundOrigin << orbitSpeed << orbitAxisX << orbitAxisY << orbitAxisZ
+                  << enableOrbit << orbitAroundOrigin << orbitAroundCamera << orbitSpeed << orbitAxisX << orbitAxisY << orbitAxisZ
                   << enableBubbles << bubbleSize << enableRibbons << curvyLines << maxRibbons
                   << enableSpring << springToOrigin << springToCamera << pinSpringToFront << springStiffness << springLength << focalDepth
                   << enableSwarm << perceptionRadius << repulsionStrength << desiredPersonalSpace << viscosity
-                  << cameraPose;
+                  << cameraPose; 
 
     sequencer << presetHandler;
     recorder << presetHandler;
 
-    // Synchronize parameter details cleanly to OSC server channels
     parameterServer() << activeParticles << pointSize << timeStep << dragFactor << enableWarp << enableClamp
-                      << enableOrbit << orbitAroundOrigin << orbitSpeed << orbitAxisX << orbitAxisY << orbitAxisZ
+                      << enableOrbit << orbitAroundOrigin << orbitAroundCamera << orbitSpeed << orbitAxisX << orbitAxisY << orbitAxisZ
                       << enableBubbles << bubbleSize << enableRibbons << curvyLines << maxRibbons
                       << enableSpring << springToOrigin << springToCamera << pinSpringToFront << springStiffness << springLength << focalDepth
                       << enableSwarm << perceptionRadius << repulsionStrength << desiredPersonalSpace << viscosity
@@ -272,8 +266,7 @@ struct AlloApp : DistributedAppWithState<WorldState> {
     nav().pos(-92.454f, -0.847f, 29.446f);
     cameraPose.set(nav()); 
 
-    // FIXED: Setup morph step duration calculation
-    presetHandler.setMorphStepTime(1.0 / graphicsDomain()->fps());
+    presetHandler.setMorphStepTime(1.0 / graphicsDomain()->fps()); 
   }
   
   bool freeze = false;
@@ -286,32 +279,35 @@ struct AlloApp : DistributedAppWithState<WorldState> {
 
     if (freeze) return;
 
-    // FIXED: Removed old gui.init() error call and kept morph tick active
-    presetHandler.stepMorphing();
+    presetHandler.stepMorphing(); 
 
-    // TWO-WAY CAMERA SYNC
+    // =======================================================
+    // FIXED TWO-WAY CAMERA SYNC FOR SEQUENCE RECORDER
+    // =======================================================
     static Pose lastNav = nav();
     if (nav().pos() != lastNav.pos() || nav().quat() != lastNav.quat()) {
-        cameraPose.setNoCalls(nav());
+        // We use set() instead of setNoCalls() so the SequenceRecorder 
+        // receives the active callback broadcast during manual flight.
+        cameraPose.set(nav()); 
         lastNav = nav();
     } else if (cameraPose.get().pos() != nav().pos() || cameraPose.get().quat() != nav().quat()) {
         nav().set(cameraPose.get());
         lastNav = nav();
     }
 
-    // MUTUALLY EXCLUSIVE TOGGLE LOGIC
+    // MUTUALLY EXCLUSIVE TOGGLE LOGIC FOR SPRINGS
     static bool lastSpringOrigin = (springToOrigin.get() == 1.0f);
     static bool lastSpringCamera = (springToCamera.get() == 1.0f);
     static bool lastPinFront = (pinSpringToFront.get() == 1.0f);
 
-    bool currentOrigin = (springToOrigin.get() == 1.0f);
-    bool currentCamera = (springToCamera.get() == 1.0f);
+    bool currentSpringOrigin = (springToOrigin.get() == 1.0f);
+    bool currentSpringCamera = (springToCamera.get() == 1.0f);
     bool currentPinFront = (pinSpringToFront.get() == 1.0f);
 
-    if (currentOrigin && !lastSpringOrigin) {
+    if (currentSpringOrigin && !lastSpringOrigin) {
         springToCamera.set(0.0f);
         pinSpringToFront.set(0.0f);
-    } else if (currentCamera && !lastSpringCamera) {
+    } else if (currentSpringCamera && !lastSpringCamera) {
         springToOrigin.set(0.0f);
         pinSpringToFront.set(0.0f);
     } else if (currentPinFront && !lastPinFront) {
@@ -323,18 +319,38 @@ struct AlloApp : DistributedAppWithState<WorldState> {
     lastSpringCamera = (springToCamera.get() == 1.0f);
     lastPinFront = (pinSpringToFront.get() == 1.0f);
 
+    // MUTUALLY EXCLUSIVE TOGGLE LOGIC FOR ORBITS
+    static bool lastOrbitOrigin = (orbitAroundOrigin.get() == 1.0f);
+    static bool lastOrbitCamera = (orbitAroundCamera.get() == 1.0f);
+
+    bool currentOrbitOrigin = (orbitAroundOrigin.get() == 1.0f);
+    bool currentOrbitCamera = (orbitAroundCamera.get() == 1.0f);
+
+    if (currentOrbitOrigin && !lastOrbitOrigin) {
+        orbitAroundCamera.set(0.0f);
+    } else if (currentOrbitCamera && !lastOrbitCamera) {
+        orbitAroundOrigin.set(0.0f);
+    }
+
+    lastOrbitOrigin = (orbitAroundOrigin.get() == 1.0f);
+    lastOrbitCamera = (orbitAroundCamera.get() == 1.0f);
+
     if (springToOrigin.get() == 1.0f) {
         springStatusText.set("Spring center: origin");
     } else if (springToCamera.get() == 1.0f) {
         springStatusText.set("Spring center: camera");
     } else if (pinSpringToFront.get() == 1.0f) {
         springStatusText.set("Spring center: distance away from camera");
+    } else {
+        springStatusText.set("Spring center: free floating context");
     }
 
     if (orbitAroundOrigin.get() == 1.0f) {
         orbitStatusText.set("Orbit center: Origin");
-    } else {
+    } else if (orbitAroundCamera.get() == 1.0f) {
         orbitStatusText.set("Orbit center: camera");
+    } else {
+        orbitStatusText.set("Orbit center: free floating vectors");
     }
 
     Vec3f camPos(nav().pos());
@@ -375,7 +391,15 @@ struct AlloApp : DistributedAppWithState<WorldState> {
         }
 
         if (enableOrbit.get() == 1.0f) {
-            Vec3f orbitCenter = (orbitAroundOrigin.get() == 1.0f) ? Vec3f(0.0f, 0.0f, 0.0f) : camPos;
+            Vec3f orbitCenter;
+            if (orbitAroundOrigin.get() == 1.0f) {
+                orbitCenter = Vec3f(0.0f, 0.0f, 0.0f);
+            } else if (orbitAroundCamera.get() == 1.0f) {
+                orbitCenter = camPos; 
+            } else {
+                orbitCenter = Vec3f(0.0f, 0.0f, 0.0f);
+            }
+
             Vec3f relativeToCenter = me - orbitCenter;
             float centerDist = relativeToCenter.mag();
             
@@ -476,7 +500,7 @@ struct AlloApp : DistributedAppWithState<WorldState> {
     
     for (int i = 0; i < current_N; i++) force[i] += - velocity[i] * dragFactor.get(); 
 
-    // --- 4. NUMERICAL INTEGRATION MODULE ---
+    // --- NUMERICAL INTEGRATION MODULE ---
     vector<Vec3f> &position(mesh.vertices());
     for (int i = 0; i < current_N; i++) {
       velocity[i] += force[i] / mass[i] * timeStep.get();
@@ -594,13 +618,8 @@ struct AlloApp : DistributedAppWithState<WorldState> {
     if (k.key() == '1') {
       for (int i = 0; i < MAX_N; i++) force[i] += randomVec3f(1);
     }
-    if (k.key() == 'r') {
-      for (int i = 0; i < MAX_N; i++) {
-        mesh.vertices()[i] = randomVec3f(5);
-        velocity[i] = randomVec3f(0.1);
-        force[i] = randomVec3f(1);
-      }
-    }
+    // We remove the manual 'r' reset key here to prevent conflicts 
+    // with the SequenceRecorder's native 'r' recording hotkey!
     return true;
   }
 
@@ -772,7 +791,7 @@ struct AlloApp : DistributedAppWithState<WorldState> {
 };
 
 int main() {
-  AlloApp app; // FIXED: Mapped configuration target cleanly back to AlloApp identifier block
+  AlloApp app;
   app.configureAudio(48000, 512, 2, 0);
   app.start();
 }
