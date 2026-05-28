@@ -1,6 +1,6 @@
 // Karl Yerkes
 // 2022-01-20
-// Upgraded: Native PresetHandler & PresetSequencer Architecture
+// Upgraded: Native PresetHandler & PresetSequencer Architecture with Full Parameter Capturing
 
 #include "al/app/al_DistributedApp.hpp"
 #include "al/app/al_GUIDomain.hpp"
@@ -109,7 +109,7 @@ struct WorldState {
 
 struct AlloApp : DistributedAppWithState<WorldState> {
   //=================================================================
-  // CORE SIMULATION PARAMETERS
+  // SIMULATION PARAMETERS
   //=================================================================
   ParameterInt activeParticles{"Active Particles", "", 279, 10, MAX_N};
   Parameter pointSize       {"Point Size", "", 4.083f, 1.0f, 10.0f};
@@ -117,43 +117,43 @@ struct AlloApp : DistributedAppWithState<WorldState> {
   Parameter dragFactor      {"Drag Factor", "", 0.700f, 0.0f, 0.9f};
   ParameterBool enableWarp  {"Enable Warp", "", 0.0f};
 
-  ParameterBool enableClamp   {"Enable Distance Clamp", "Boundary Control", 0.0f};
+  ParameterBool enableClamp   {"Enable Distance Clamp", "", 0.0f};
 
-  ParameterBool enableOrbit   {"Enable Orbit", "Orbit Settings", 1.0f};
-  ParameterBool orbitAroundOrigin{"Orbit Around Origin", "Orbit Settings", 1.0f};
-  Parameter orbitSpeed        {"Orbit Speed", "Orbit Settings", 0.034f, -15.0f, 15.0f};
-  Parameter orbitAxisX        {"Orbit Axis X", "Orbit Settings", -0.880f, -1.0f, 1.0f};
-  Parameter orbitAxisY        {"Orbit Axis Y", "Orbit Settings", -0.402f, -1.0f, 1.0f};
-  Parameter orbitAxisZ        {"Orbit Axis Z", "Orbit Settings", 1.000f, -1.0f, 1.0f};
-  ParameterString orbitStatusText{"Orbit Center Status", "Orbit Settings", "Orbit center: Origin"};
+  ParameterBool enableOrbit   {"Enable Orbit", "", 1.0f};
+  ParameterBool orbitAroundOrigin{"Orbit Around Origin", "", 1.0f};
+  Parameter orbitSpeed        {"Orbit Speed", "", 0.034f, -15.0f, 15.0f};
+  Parameter orbitAxisX        {"Orbit Axis X", "", -0.880f, -1.0f, 1.0f};
+  Parameter orbitAxisY        {"Orbit Axis Y", "", -0.402f, -1.0f, 1.0f};
+  Parameter orbitAxisZ        {"Orbit Axis Z", "", 1.000f, -1.0f, 1.0f};
+  ParameterString orbitStatusText{"Orbit Center Status", "", "Orbit center: Origin"};
 
-  ParameterBool enableBubbles {"Enable Bubbles", "Ribbon Settings", 1.0f};  
-  Parameter bubbleSize       {"Bubble Size", "Ribbon Settings", 1.673f, 0.01f, 5.0f};
-  ParameterBool enableRibbons{"Enable Ribbons", "Ribbon Settings", 1.0f};
-  ParameterBool curvyLines   {"Curvy Lines", "Ribbon Settings", 1.0f}; 
-  ParameterInt maxRibbons    {"Max Ribbons", "Ribbon Settings", 10, 1, 25};
+  ParameterBool enableBubbles {"Enable Bubbles", "", 1.0f};  
+  Parameter bubbleSize       {"Bubble Size", "", 1.673f, 0.01f, 5.0f};
+  ParameterBool enableRibbons{"Enable Ribbons", "", 1.0f};
+  ParameterBool curvyLines   {"Curvy Lines", "", 1.0f}; 
+  ParameterInt maxRibbons    {"Max Ribbons", "", 10, 1, 25};
 
-  ParameterBool enableSpring   {"Enable Spring", "Spring Settings", 1.0f};
-  ParameterBool springToOrigin {"Spring Center to Origin", "Spring Settings", 1.0f};
-  ParameterBool springToCamera {"Spring Center to Camera", "Spring Settings", 0.0f};
-  ParameterBool pinSpringToFront{"Pin Spring to Camera Front", "Spring Settings", 0.0f};
-  Parameter springStiffness    {"Spring Stiffness", "Spring Settings", 0.718f, 0.0f, 0.9f};
-  Parameter springLength       {"Spring Length", "Spring Settings", 16.437f, 0.0f, 50.0f};
-  Parameter focalDepth         {"Focal Depth", "Spring Settings", 45.632f, -10.0f, 100.0f};
-  ParameterString springStatusText{"Spring Center Status", "Spring Settings", "Spring center: origin"};
-
-  ParameterVec3 cameraPosDisplay{"Camera Position (XYZ)", "Status", Vec3f(0.0f)};
+  ParameterBool enableSpring   {"Enable Spring", "", 1.0f};
+  ParameterBool springToOrigin {"Spring Center to Origin", "", 1.0f};
+  ParameterBool springToCamera {"Spring Center to Camera", "", 0.0f};
+  ParameterBool pinSpringToFront{"Pin Spring to Camera Front", "", 0.0f};
+  Parameter springStiffness    {"Spring Stiffness", "", 0.718f, 0.0f, 0.9f};
+  Parameter springLength       {"Spring Length", "", 16.437f, 0.0f, 50.0f};
+  Parameter focalDepth         {"Focal Depth", "", 45.632f, -10.0f, 100.0f};
+  ParameterString springStatusText{"Spring Center Status", "", "Spring center: origin"};
   
-  ParameterBool enableSwarm     {"Enable Swarm", "Swarm Settings", 1.0f};
-  Parameter perceptionRadius    {"Perception Radius", "Swarm Settings", 15.786f, 0.5f, 20.0f}; 
-  Parameter repulsionStrength   {"Repulsion Strength", "Swarm Settings", 48.793f, 1.0f, 100.0f};    
-  Parameter desiredPersonalSpace{"Personal Space", "Swarm Settings", 5.500f, 1.0f, 20.0f};     
-  Parameter viscosity           {"Viscosity", "Swarm Settings", 1.400f, 0.0f, 10.0f};
+  ParameterBool enableSwarm     {"Enable Swarm", "", 1.0f};
+  Parameter perceptionRadius    {"Perception Radius", "", 15.786f, 0.5f, 20.0f}; 
+  Parameter repulsionStrength   {"Repulsion Strength", "", 48.793f, 1.0f, 100.0f};    
+  Parameter desiredPersonalSpace{"Personal Space", "", 5.500f, 1.0f, 20.0f};     
+  Parameter viscosity           {"Viscosity", "", 1.400f, 0.0f, 10.0f};
+
+  ParameterPose cameraPose{"Camera Pose", ""};
 
   //=================================================================
   // NATIVE ALLOLIB PRESET ARCHITECTURE
   //=================================================================
-  PresetHandler presetHandler{"../Presets_Vault", true}; 
+  PresetHandler presetHandler{TimeMasterMode::TIME_MASTER_FREE, "../Presets_Vault", true}; 
   PresetSequencer sequencer;
   SequenceRecorder recorder;
 
@@ -173,6 +173,7 @@ struct AlloApp : DistributedAppWithState<WorldState> {
         auto GUIdomain = GUIDomain::enableGUI(defaultWindowDomain());
         auto &gui = GUIdomain->newGUI();
 
+        // 1. General Controls
         gui.add(activeParticles);
         gui.add(pointSize); 
         gui.add(timeStep);   
@@ -180,6 +181,7 @@ struct AlloApp : DistributedAppWithState<WorldState> {
         gui.add(enableWarp);
         gui.add(enableClamp);
 
+        // 2. Orbit Controls
         gui.add(enableOrbit);
         gui.add(orbitAroundOrigin);
         gui.add(orbitSpeed);
@@ -188,12 +190,14 @@ struct AlloApp : DistributedAppWithState<WorldState> {
         gui.add(orbitAxisZ);
         gui.add(orbitStatusText);
 
+        // 3. Ribbon Structure Controls
         gui.add(enableBubbles);  
         gui.add(bubbleSize);
         gui.add(enableRibbons);
         gui.add(curvyLines); 
         gui.add(maxRibbons);
 
+        // 4. Spring Settings Controls
         gui.add(enableSpring);
         gui.add(springToOrigin);
         gui.add(springToCamera);
@@ -203,40 +207,38 @@ struct AlloApp : DistributedAppWithState<WorldState> {
         gui.add(focalDepth);
         gui.add(springStatusText);
 
+        // 5. Fluids Swarm Settings Controls
         gui.add(enableSwarm);
         gui.add(perceptionRadius);
         gui.add(repulsionStrength);
         gui.add(desiredPersonalSpace);
         gui.add(viscosity);
 
-        gui.add(cameraPosDisplay);
-
-        // NATIVE GUI INJECTION
+        // 6. Automation Systems Controls
+        gui.add(cameraPose);
         gui << presetHandler; 
         gui << sequencer;    
         gui << recorder;     
     }
 
-    // STREAM ALL PARAMS INTO PRESET HANDLER
+    // ALL FLAT PARAMETERS COHERENTLY STREAMED INTO ALLOLIB BACKEND
     presetHandler << activeParticles << pointSize << timeStep << dragFactor << enableWarp << enableClamp
                   << enableOrbit << orbitAroundOrigin << orbitSpeed << orbitAxisX << orbitAxisY << orbitAxisZ
                   << enableBubbles << bubbleSize << enableRibbons << curvyLines << maxRibbons
                   << enableSpring << springToOrigin << springToCamera << pinSpringToFront << springStiffness << springLength << focalDepth
-                  << enableSwarm << perceptionRadius << repulsionStrength << desiredPersonalSpace << viscosity;
+                  << enableSwarm << perceptionRadius << repulsionStrength << desiredPersonalSpace << viscosity
+                  << cameraPose;
 
-    // ATTACH HANDLER TO SEQUENCER & RECORDER
     sequencer << presetHandler;
     recorder << presetHandler;
 
-    // Cuttlebone OSC Synchronization Pipeline
-    parameterServer() << pointSize << timeStep << dragFactor << springStiffness 
-                      << springLength << focalDepth << perceptionRadius 
-                      << repulsionStrength << desiredPersonalSpace << viscosity 
-                      << bubbleSize << enableSpring << springToOrigin << springToCamera << pinSpringToFront
-                      << enableSwarm << enableWarp << enableRibbons 
-                      << enableBubbles 
-                      << enableOrbit << orbitAroundOrigin << orbitSpeed 
-                      << orbitAxisX << orbitAxisY << orbitAxisZ << enableClamp;
+    // Synchronize parameter details cleanly to OSC server channels
+    parameterServer() << activeParticles << pointSize << timeStep << dragFactor << enableWarp << enableClamp
+                      << enableOrbit << orbitAroundOrigin << orbitSpeed << orbitAxisX << orbitAxisY << orbitAxisZ
+                      << enableBubbles << bubbleSize << enableRibbons << curvyLines << maxRibbons
+                      << enableSpring << springToOrigin << springToCamera << pinSpringToFront << springStiffness << springLength << focalDepth
+                      << enableSwarm << perceptionRadius << repulsionStrength << desiredPersonalSpace << viscosity
+                      << cameraPose;
   }
 
   void onCreate() override {
@@ -268,6 +270,10 @@ struct AlloApp : DistributedAppWithState<WorldState> {
     }
 
     nav().pos(-92.454f, -0.847f, 29.446f);
+    cameraPose.set(nav()); 
+
+    // FIXED: Setup morph step duration calculation
+    presetHandler.setMorphStepTime(1.0 / graphicsDomain()->fps());
   }
   
   bool freeze = false;
@@ -279,6 +285,19 @@ struct AlloApp : DistributedAppWithState<WorldState> {
     state().time += dt;
 
     if (freeze) return;
+
+    // FIXED: Removed old gui.init() error call and kept morph tick active
+    presetHandler.stepMorphing();
+
+    // TWO-WAY CAMERA SYNC
+    static Pose lastNav = nav();
+    if (nav().pos() != lastNav.pos() || nav().quat() != lastNav.quat()) {
+        cameraPose.setNoCalls(nav());
+        lastNav = nav();
+    } else if (cameraPose.get().pos() != nav().pos() || cameraPose.get().quat() != nav().quat()) {
+        nav().set(cameraPose.get());
+        lastNav = nav();
+    }
 
     // MUTUALLY EXCLUSIVE TOGGLE LOGIC
     static bool lastSpringOrigin = (springToOrigin.get() == 1.0f);
@@ -310,8 +329,6 @@ struct AlloApp : DistributedAppWithState<WorldState> {
         springStatusText.set("Spring center: camera");
     } else if (pinSpringToFront.get() == 1.0f) {
         springStatusText.set("Spring center: distance away from camera");
-    } else {
-        springStatusText.set("Spring center: free floating context");
     }
 
     if (orbitAroundOrigin.get() == 1.0f) {
@@ -324,7 +341,6 @@ struct AlloApp : DistributedAppWithState<WorldState> {
     Vec3f ur(nav().ur()); 
     Vec3f uu(nav().uu()); 
     Vec3f uf(nav().uf());
-    cameraPosDisplay.set(camPos);
 
     int current_N = activeParticles.get();
 
@@ -460,7 +476,7 @@ struct AlloApp : DistributedAppWithState<WorldState> {
     
     for (int i = 0; i < current_N; i++) force[i] += - velocity[i] * dragFactor.get(); 
 
-    // --- NUMERICAL INTEGRATION & BOUNDARY CLAMPS ---
+    // --- 4. NUMERICAL INTEGRATION MODULE ---
     vector<Vec3f> &position(mesh.vertices());
     for (int i = 0; i < current_N; i++) {
       velocity[i] += force[i] / mass[i] * timeStep.get();
@@ -509,19 +525,23 @@ struct AlloApp : DistributedAppWithState<WorldState> {
               if (relY < -edge)  position[i] += uu * (edge * 2.0f); 
           }
 
-          float minDepth = 10.0f;
-          float maxDepth = 120.0f;
-          float depthRange = maxDepth - minDepth;
+          float activeHorizon = focalDepth.get();
+          if (activeHorizon < 20.0f) activeHorizon = 45.632f; 
 
-          if (relZ < minDepth) {
-              position[i] += uf * depthRange;
-              float zVel = velocity[i].dot(uf);
-              if (zVel < 0.0f) velocity[i] -= uf * (zVel * 2.0f); 
-          } 
-          if (relZ > maxDepth) {
-              position[i] -= uf * depthRange;
+          float maxDepthBound = activeHorizon + 35.0f; 
+          float softPushOffset = 25.0f; 
+
+          if (relZ > maxDepthBound) {
+              position[i] -= uf * softPushOffset; 
               float zVel = velocity[i].dot(uf);
               if (zVel > 0.0f) velocity[i] -= uf * (zVel * 2.0f);
+          }
+
+          float microCloseFloor = 12.0f;
+          if (relZ < microCloseFloor) {
+              position[i] += uf * softPushOffset;
+              float zVel = velocity[i].dot(uf);
+              if (zVel < 0.0f) velocity[i] -= uf * (zVel * 2.0f);
           }
       }
     }
@@ -752,7 +772,7 @@ struct AlloApp : DistributedAppWithState<WorldState> {
 };
 
 int main() {
-  AlloApp app;
+  AlloApp app; // FIXED: Mapped configuration target cleanly back to AlloApp identifier block
   app.configureAudio(48000, 512, 2, 0);
   app.start();
 }
