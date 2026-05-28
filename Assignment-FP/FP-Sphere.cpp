@@ -1,5 +1,6 @@
 // Karl Yerkes
 // 2022-01-20
+// Upgraded: Native PresetHandler & PresetSequencer Architecture
 
 #include "al/app/al_DistributedApp.hpp"
 #include "al/app/al_GUIDomain.hpp"
@@ -10,9 +11,12 @@
 #include "al/graphics/al_Shapes.hpp"
 #include "al/ui/al_Parameter.hpp" 
 
+// NATIVE ALLOLIB PRESET INCLUDES
+#include "al/ui/al_PresetHandler.hpp"
+#include "al/ui/al_PresetSequencer.hpp"
+#include "al/ui/al_SequenceRecorder.hpp"
+
 #include <algorithm>
-#include <fstream>
-#include <random>
 #include <vector>
 #include <unordered_map>
 #include <iostream>
@@ -103,70 +107,9 @@ struct WorldState {
   bool syncEnableClamp;
 };
 
-struct Keyframe {
-    string name;
-    float duration;
-    Vec3f pos;
-    Quatf rot;
-    
-    int activeParticles;
-    int maxRibbons;
-    float pointSize;
-    float timeStep;
-    float dragFactor;
-    float springStiffness;
-    float springLength;
-    float focalDepth;
-    float perceptionRadius;
-    float repulsionStrength;
-    float desiredPersonalSpace;
-    float viscosity;
-    float bubbleSize;
-    float orbitSpeed;
-    float orbitAxisX;
-    float orbitAxisY;
-    float orbitAxisZ;
-
-    float enableSpring;
-    float springToOrigin;
-    float springToCamera;
-    float pinSpringToFront;
-    float enableSwarm;
-    float enableWarp;
-    float enableRibbons;
-    float curvyLines;
-    float enableBubbles;
-    float enableOrbit;
-    float orbitAroundOrigin;
-    float enableClamp;
-};
-
-class Timeline {
-public:
-    vector<Keyframe> events;
-    int currentIndex = 0;
-    float timer = 0.0f;
-    bool active = false;
-
-    void load(const string& filename) {
-        events.clear();
-        ifstream file(filename);
-        if (!file.is_open()) {
-            return;
-        }
-        string line;
-        while (getline(file, line)) {
-            if (line.find("{") != string::npos) {
-                Keyframe k;
-                events.push_back(k);
-            }
-        }
-    }
-};
-
 struct AlloApp : DistributedAppWithState<WorldState> {
   //=================================================================
-  // CORE LAYOUT VARIABLE DECLARATIONS
+  // CORE SIMULATION PARAMETERS
   //=================================================================
   ParameterInt activeParticles{"Active Particles", "", 279, 10, MAX_N};
   Parameter pointSize       {"Point Size", "", 4.083f, 1.0f, 10.0f};
@@ -174,18 +117,8 @@ struct AlloApp : DistributedAppWithState<WorldState> {
   Parameter dragFactor      {"Drag Factor", "", 0.700f, 0.0f, 0.9f};
   ParameterBool enableWarp  {"Enable Warp", "", 0.0f};
 
-  // Boundary Control
   ParameterBool enableClamp   {"Enable Distance Clamp", "Boundary Control", 0.0f};
 
-  // Controls Menu
-  ParameterBool saveKeyframe    {"Save Keyframe", "Controls", 0.0f};
-  ParameterBool playAutomation  {"Play Automation", "Controls", 0.0f};
-  ParameterBool pauseAutomation {"Pause Automation", "Controls", 0.0f};
-  ParameterBool stopAutomation  {"Stop Automation", "Controls", 0.0f};
-  Parameter transitionSpeed     {"Transition Speed Factor", "Controls", 1.000f, 0.1f, 10.0f};
-  Parameter holdDuration        {"Keyframe Hold Time (sec)", "Controls", 2.000f, 0.0f, 10.0f};
-
-  // Orbit Settings Submenu
   ParameterBool enableOrbit   {"Enable Orbit", "Orbit Settings", 1.0f};
   ParameterBool orbitAroundOrigin{"Orbit Around Origin", "Orbit Settings", 1.0f};
   Parameter orbitSpeed        {"Orbit Speed", "Orbit Settings", 0.034f, -15.0f, 15.0f};
@@ -194,14 +127,12 @@ struct AlloApp : DistributedAppWithState<WorldState> {
   Parameter orbitAxisZ        {"Orbit Axis Z", "Orbit Settings", 1.000f, -1.0f, 1.0f};
   ParameterString orbitStatusText{"Orbit Center Status", "Orbit Settings", "Orbit center: Origin"};
 
-  // Ribbon Settings Submenu
   ParameterBool enableBubbles {"Enable Bubbles", "Ribbon Settings", 1.0f};  
   Parameter bubbleSize       {"Bubble Size", "Ribbon Settings", 1.673f, 0.01f, 5.0f};
   ParameterBool enableRibbons{"Enable Ribbons", "Ribbon Settings", 1.0f};
   ParameterBool curvyLines   {"Curvy Lines", "Ribbon Settings", 1.0f}; 
   ParameterInt maxRibbons    {"Max Ribbons", "Ribbon Settings", 10, 1, 25};
 
-  // Spring Settings Submenu
   ParameterBool enableSpring   {"Enable Spring", "Spring Settings", 1.0f};
   ParameterBool springToOrigin {"Spring Center to Origin", "Spring Settings", 1.0f};
   ParameterBool springToCamera {"Spring Center to Camera", "Spring Settings", 0.0f};
@@ -211,18 +142,20 @@ struct AlloApp : DistributedAppWithState<WorldState> {
   Parameter focalDepth         {"Focal Depth", "Spring Settings", 45.632f, -10.0f, 100.0f};
   ParameterString springStatusText{"Spring Center Status", "Spring Settings", "Spring center: origin"};
 
-  // Telemetry Status Monitoring Displays
-  ParameterInt currentFrameNum{"Current Frame Index", "Status", 0, 0, 100};
-  ParameterString timelineStatus{"Timeline Status", "Status", "Stopped"};
   ParameterVec3 cameraPosDisplay{"Camera Position (XYZ)", "Status", Vec3f(0.0f)};
-  ParameterString sequencingPhase{"Current Sequence Phase", "Status", "Idle"};
   
-  // Swarm Settings Submenu
   ParameterBool enableSwarm     {"Enable Swarm", "Swarm Settings", 1.0f};
   Parameter perceptionRadius    {"Perception Radius", "Swarm Settings", 15.786f, 0.5f, 20.0f}; 
   Parameter repulsionStrength   {"Repulsion Strength", "Swarm Settings", 48.793f, 1.0f, 100.0f};    
   Parameter desiredPersonalSpace{"Personal Space", "Swarm Settings", 5.500f, 1.0f, 20.0f};     
   Parameter viscosity           {"Viscosity", "Swarm Settings", 1.400f, 0.0f, 10.0f};
+
+  //=================================================================
+  // NATIVE ALLOLIB PRESET ARCHITECTURE
+  //=================================================================
+  PresetHandler presetHandler{"../Presets_Vault", true}; 
+  PresetSequencer sequencer;
+  SequenceRecorder recorder;
 
   ShaderProgram bubbleShader; 
   ShaderProgram pointShader;
@@ -230,44 +163,23 @@ struct AlloApp : DistributedAppWithState<WorldState> {
 
   Mesh mesh;
   Mesh sphereMesh; 
-  Timeline timeline;
 
   vector<Vec3f> velocity;
   vector<Vec3f> force;
   vector<float> mass;
 
   void onInit() override {
-  // 1. Allosphere safe Cuttlebone initialization
-  //for running on sphere
-    auto cuttleboneDomain = CuttleboneStateSimulationDomain<WorldState>::enableCuttlebone(this);
-    if (!cuttleboneDomain) {
-      std::cerr << "WARNING: Cuttlebone failed to start. Running local mode fallback." << std::endl;
-    }
-
-
     if (isPrimary()) {
         auto GUIdomain = GUIDomain::enableGUI(defaultWindowDomain());
         auto &gui = GUIdomain->newGUI();
 
-        // 1. General Configuration Sliders
         gui.add(activeParticles);
         gui.add(pointSize); 
         gui.add(timeStep);   
         gui.add(dragFactor);  
         gui.add(enableWarp);
-
-        // 2. Damping Bounds
         gui.add(enableClamp);
 
-        // 3. Automation Playback System Controls Folder
-        gui.add(saveKeyframe);
-        gui.add(playAutomation);
-        gui.add(pauseAutomation);
-        gui.add(stopAutomation);
-        gui.add(transitionSpeed);  
-        gui.add(holdDuration);     
-
-        // 4. Orbit Settings Collapsible Folder
         gui.add(enableOrbit);
         gui.add(orbitAroundOrigin);
         gui.add(orbitSpeed);
@@ -276,14 +188,12 @@ struct AlloApp : DistributedAppWithState<WorldState> {
         gui.add(orbitAxisZ);
         gui.add(orbitStatusText);
 
-        // 5. Ribbon Settings Collapsible Folder
         gui.add(enableBubbles);  
         gui.add(bubbleSize);
         gui.add(enableRibbons);
         gui.add(curvyLines); 
         gui.add(maxRibbons);
 
-        // 6. Spring Focus Settings Collapsible Folder
         gui.add(enableSpring);
         gui.add(springToOrigin);
         gui.add(springToCamera);
@@ -293,44 +203,46 @@ struct AlloApp : DistributedAppWithState<WorldState> {
         gui.add(focalDepth);
         gui.add(springStatusText);
 
-        // 7. Dynamic Telemetry Status Layout Monitor Group
-        gui.add(currentFrameNum);
-        gui.add(timelineStatus);
-        gui.add(cameraPosDisplay);
-        gui.add(sequencingPhase);
-
-        // 8. Swarm Interaction Settings Folder (Locked to bottom)
         gui.add(enableSwarm);
         gui.add(perceptionRadius);
         gui.add(repulsionStrength);
         gui.add(desiredPersonalSpace);
         gui.add(viscosity);
-        
-        timeline.load("../events.txt");
+
+        gui.add(cameraPosDisplay);
+
+        // NATIVE GUI INJECTION
+        gui << presetHandler; 
+        gui << sequencer;    
+        gui << recorder;     
     }
 
+    // STREAM ALL PARAMS INTO PRESET HANDLER
+    presetHandler << activeParticles << pointSize << timeStep << dragFactor << enableWarp << enableClamp
+                  << enableOrbit << orbitAroundOrigin << orbitSpeed << orbitAxisX << orbitAxisY << orbitAxisZ
+                  << enableBubbles << bubbleSize << enableRibbons << curvyLines << maxRibbons
+                  << enableSpring << springToOrigin << springToCamera << pinSpringToFront << springStiffness << springLength << focalDepth
+                  << enableSwarm << perceptionRadius << repulsionStrength << desiredPersonalSpace << viscosity;
+
+    // ATTACH HANDLER TO SEQUENCER & RECORDER
+    sequencer << presetHandler;
+    recorder << presetHandler;
+
+    // Cuttlebone OSC Synchronization Pipeline
     parameterServer() << pointSize << timeStep << dragFactor << springStiffness 
                       << springLength << focalDepth << perceptionRadius 
                       << repulsionStrength << desiredPersonalSpace << viscosity 
                       << bubbleSize << enableSpring << springToOrigin << springToCamera << pinSpringToFront
                       << enableSwarm << enableWarp << enableRibbons 
-                      << enableBubbles << saveKeyframe
-                      << playAutomation << pauseAutomation << stopAutomation
-                      << transitionSpeed << holdDuration
+                      << enableBubbles 
                       << enableOrbit << orbitAroundOrigin << orbitSpeed 
                       << orbitAxisX << orbitAxisY << orbitAxisZ << enableClamp;
   }
 
   void onCreate() override {
-    pointShader.compile(slurp("../point-vertex.glsl"),
-                        slurp("../point-fragment.glsl"),
-                        slurp("../point-geometry.glsl"));
-                        
-    bubbleShader.compile(slurp("../bubble-vertex.glsl"),
-                         slurp("../bubble-fragment.glsl"));
-
-    ribbonShader.compile(slurp("../ribbon-vertex.glsl"),
-                         slurp("../ribbon-fragment.glsl"));
+    pointShader.compile(slurp("../point-vertex.glsl"), slurp("../point-fragment.glsl"), slurp("../point-geometry.glsl"));
+    bubbleShader.compile(slurp("../bubble-vertex.glsl"), slurp("../bubble-fragment.glsl"));
+    ribbonShader.compile(slurp("../ribbon-vertex.glsl"), slurp("../ribbon-fragment.glsl"));
 
     addSphere(sphereMesh, 1.0, 32, 32);
     sphereMesh.generateNormals(); 
@@ -359,7 +271,6 @@ struct AlloApp : DistributedAppWithState<WorldState> {
   }
   
   bool freeze = false;
-  bool isHolding = false; 
 
   void onAnimate(double dt) override {
     if (!isPrimary()) return;
@@ -369,7 +280,7 @@ struct AlloApp : DistributedAppWithState<WorldState> {
 
     if (freeze) return;
 
-    // Mutually exclusive anchor evaluations
+    // MUTUALLY EXCLUSIVE TOGGLE LOGIC
     static bool lastSpringOrigin = (springToOrigin.get() == 1.0f);
     static bool lastSpringCamera = (springToCamera.get() == 1.0f);
     static bool lastPinFront = (pinSpringToFront.get() == 1.0f);
@@ -399,6 +310,8 @@ struct AlloApp : DistributedAppWithState<WorldState> {
         springStatusText.set("Spring center: camera");
     } else if (pinSpringToFront.get() == 1.0f) {
         springStatusText.set("Spring center: distance away from camera");
+    } else {
+        springStatusText.set("Spring center: free floating context");
     }
 
     if (orbitAroundOrigin.get() == 1.0f) {
@@ -407,29 +320,6 @@ struct AlloApp : DistributedAppWithState<WorldState> {
         orbitStatusText.set("Orbit center: camera");
     }
 
-    if (playAutomation.get()) {
-        timeline.active = true;
-        timelineStatus.set("Playing");
-        playAutomation.set(0); 
-    }
-    if (pauseAutomation.get()) {
-        timeline.active = false;
-        timelineStatus.set("Paused");
-        sequencingPhase.set("Paused");
-        pauseAutomation.set(0); 
-    }
-    if (stopAutomation.get()) {
-        timeline.active = false;
-        timeline.currentIndex = 0;
-        timeline.timer = 0.0f;
-        isHolding = false;
-        timelineStatus.set("Stopped");
-        sequencingPhase.set("Stopped");
-        currentFrameNum.set(0);
-        stopAutomation.set(0); 
-    }
-
-    // Capture camera vectors AFTER automation updates have finalized positions
     Vec3f camPos(nav().pos());
     Vec3f ur(nav().ur()); 
     Vec3f uu(nav().uu()); 
@@ -438,7 +328,7 @@ struct AlloApp : DistributedAppWithState<WorldState> {
 
     int current_N = activeParticles.get();
 
-    // SPRING AND SWARM SIMULATION PHYSICS FORCES
+    // PHYSICS ENGINE MODULES
     if (enableSpring.get() == 1.0f) {
       Vec3f focal_point;
       if (springToOrigin.get() == 1.0f) {
@@ -570,7 +460,7 @@ struct AlloApp : DistributedAppWithState<WorldState> {
     
     for (int i = 0; i < current_N; i++) force[i] += - velocity[i] * dragFactor.get(); 
 
-    // --- 4. NUMERICAL INTEGRATION MODULE ---
+    // --- NUMERICAL INTEGRATION & BOUNDARY CLAMPS ---
     vector<Vec3f> &position(mesh.vertices());
     for (int i = 0; i < current_N; i++) {
       velocity[i] += force[i] / mass[i] * timeStep.get();
@@ -580,7 +470,6 @@ struct AlloApp : DistributedAppWithState<WorldState> {
       normalized_y = std::max(0.0f, std::min(normalized_y, 1.0f));
       state().color[i] = Color(normalized_y * 0.5f, normalized_y * 0.8f + 0.2f, 1.0f, 1.0f);
 
-      // DISTANCE CONTROL CLAMP
       Vec3f systemCenter = (springToOrigin.get() == 1.0f) ? Vec3f(0.0f, 0.0f, 0.0f) : camPos;
       Vec3f systemRelPos = position[i] - systemCenter;
       float distToCenter = systemRelPos.mag();
@@ -590,7 +479,6 @@ struct AlloApp : DistributedAppWithState<WorldState> {
 
       if (distToCenter > maxSystemRadius && distToCenter > 0.001f) {
           Vec3f outboundDir = systemRelPos / distToCenter;
-          
           if (enableClamp.get() == 1.0f) {
               float normalVelocity = velocity[i].dot(outboundDir);
               if (normalVelocity > 0.0f) {
@@ -598,7 +486,6 @@ struct AlloApp : DistributedAppWithState<WorldState> {
                   float dampingMultiplier = 1.0f + overshootFactor * 5.0f;
                   velocity[i] -= outboundDir * normalVelocity * std::min(dampingMultiplier * timeStep.get(), 1.0f);
               }
-              
               if (distToCenter > absoluteMaxThreshold) {
                   position[i] = systemCenter + outboundDir * absoluteMaxThreshold;
                   velocity[i] -= outboundDir * velocity[i].dot(outboundDir);
@@ -606,9 +493,6 @@ struct AlloApp : DistributedAppWithState<WorldState> {
           }
       }
 
-      // =================================================================
-      // GENTLE BACKGROUND DEPTH RECYCLING FRUSTUM ENGINE
-      // =================================================================
       if (enableWarp.get() == 1.0f) { 
           Vec3f relPos = position[i] - camPos; 
           float relX = relPos.dot(ur);  
@@ -619,44 +503,27 @@ struct AlloApp : DistributedAppWithState<WorldState> {
               float edge = relZ * tan((lens().fovy() / 2.0f) * (3.14159265f / 180.0f)); 
               float x_edge = edge * (float(width()) / height()); 
 
-              // Horizontal / Vertical side wrapping
               if (relX > x_edge)  position[i] -= ur * (x_edge * 2.0f); 
               if (relX < -x_edge) position[i] += ur * (x_edge * 2.0f); 
               if (relY > edge)   position[i] -= uu * (edge * 2.0f); 
               if (relY < -edge)  position[i] += uu * (edge * 2.0f); 
           }
 
-          // DYNAMIC SLIDER INTEGRATED DEPTH MATRIX WRAPPING
-          // Instead of hardcoding 5 to 65, we derive boundaries from your Focal Depth configuration.
-          float activeHorizon = focalDepth.get();
-          if (activeHorizon < 20.0f) activeHorizon = 45.632f; // Safety floor fallback
+          float minDepth = 10.0f;
+          float maxDepth = 120.0f;
+          float depthRange = maxDepth - minDepth;
 
-          float maxDepthBound = activeHorizon + 35.0f; 
-          float softPushOffset = 25.0f; // The gentle background shift step increment
-
-          // GENTLE DEEP-PLANE HORIZON RESET
-          // When a particle drifts past the deep zone, gently push it forward by a 
-          // small step, keeping it locked inside the distant background view pool.
-          if (relZ > maxDepthBound) {
-              position[i] -= uf * softPushOffset; 
-              
-              // Invert velocity component along view vector to break oscillation loops
+          if (relZ < minDepth) {
+              position[i] += uf * depthRange;
+              float zVel = velocity[i].dot(uf);
+              if (zVel < 0.0f) velocity[i] -= uf * (zVel * 2.0f); 
+          } 
+          if (relZ > maxDepth) {
+              position[i] -= uf * depthRange;
               float zVel = velocity[i].dot(uf);
               if (zVel > 0.0f) velocity[i] -= uf * (zVel * 2.0f);
           }
-
-          // GENTLE CLOSE-PLANE SAFETY PASS
-          // If a swarm node drifts too close to your lens (under 12 units out), 
-          // push it back deeper into the scene landscape space smoothly.
-          float microCloseFloor = 12.0f;
-          if (relZ < microCloseFloor) {
-              position[i] += uf * softPushOffset;
-              
-              float zVel = velocity[i].dot(uf);
-              if (zVel < 0.0f) velocity[i] -= uf * (zVel * 2.0f);
-          }
       }
-      // =================================================================
     }
 
     if (enableBubbles.get() == 1.0f) {
