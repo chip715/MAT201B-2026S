@@ -170,6 +170,12 @@ struct AlloApp : DistributedAppWithState<WorldState> {
   vector<float> mass;
 
   void onInit() override {
+  // 1. Allosphere safe Cuttlebone initialization
+    auto cuttleboneDomain = CuttleboneStateSimulationDomain<WorldState>::enableCuttlebone(this);
+    if (!cuttleboneDomain) {
+      std::cerr << "WARNING: Cuttlebone failed to start. Running local mode fallback." << std::endl;
+    }
+    
     if (isPrimary()) {
         auto GUIdomain = GUIDomain::enableGUI(defaultWindowDomain());
         auto &gui = GUIdomain->newGUI();
