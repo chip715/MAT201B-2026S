@@ -14,24 +14,22 @@ void main() {
     // 1. COLLECT BASE DISTANCE COLOR FROM C++
     vec3 baseColor = vColor.rgb * lightIntensity;
 
-    // 2. CYLINDRICAL CORE MATH (Slightly narrowed to keep lines elegant)
-    float silkCore = exp(-pow(edgeDist * 3.0, 2.0));
-    float softSheen = pow(1.0 - edgeDist, 1.5);
+    // 2. HIGH-CONTRAST FOCUS SHARPENING MATH
+    // Instead of letting the blur scale with geometric thickness, we force the core 
+    // to remain punchy and sharp. We compress the falloff using high-power scaling thresholds.
+    float silkCore = smoothstep(0.4, 0.0, edgeDist); 
+    float softSheen = smoothstep(1.0, 0.7, edgeDist); // Keeps the ribbon fully solid across 70% of its width
 
     // 3. CONVERGENCE TAPER (The Hotspot Dimmer)
-    // Generates a smooth falloff factor that dips near the terminal endpoints (0.0 and 1.0).
-    // This allows the ribbon to be vibrant and fully opaque in open air spaces, 
-    // but dims it smoothly right as it enters the crowded convergence hubs.
     float hubDampener = smoothstep(0.0, 0.15, uv.x) * smoothstep(0.0, 0.15, 1.0 - uv.x);
 
     // 4. COLOR MODULATION WITH EXPOSURE CONTROL
-    // We heavily dim the white glare accent down to a tiny 0.05 scaling factor,
-    // and route the main brightness through the dampener to limit additive overdrive.
-    vec3 coreHighlight = baseColor * 1.2; 
+    // Brighten the main color map to ensure clarity on the multi-projector Allosphere screen.
+    vec3 coreHighlight = baseColor * 2.0; 
     vec3 animatedRGB = mix(baseColor * softSheen, coreHighlight, silkCore);
     
-    // Tiny, heavily restrained glint at the absolute center
-    animatedRGB += vec3(0.8, 0.9, 1.0) * silkCore * 0.05;
+    // Crisp, bright glint right at the absolute center line
+    animatedRGB += vec3(0.9, 0.95, 1.0) * silkCore * 0.4;
     
     // Apply the hub dampener directly to the RGB intensity to prevent white clipping
     animatedRGB *= mix(0.4, 1.0, hubDampener);
@@ -39,12 +37,13 @@ void main() {
     // 5. JOINT TERMINATIONS AND ALPHA PASS
     float jointCap = smoothstep(0.0, 0.05, uv.x) * smoothstep(0.0, 0.05, 1.0 - uv.x);
 
-    // Scale the alpha with the hub dampener to thin out the geometry at the cluster center
-    float finalAlpha = (softSheen * 0.4 + silkCore * 0.6) * vColor.a * jointCap * mix(0.5, 1.0, hubDampener);
-    finalAlpha = max(finalAlpha, silkCore * 0.15 * jointCap * hubDampener);
+    // Force high alpha opacity across the ribbon body so wide lines remain crisp and visible
+    float finalAlpha = mix(softSheen * 0.8, 1.0, silkCore) * vColor.a * jointCap * mix(0.6, 1.0, hubDampener);
 
-    // Sub-pixel edge anti-aliasing feathering step
-    finalAlpha *= smoothstep(1.0, 0.85, edgeDist);
+    // 6. SUB-PIXEL ANTIALIASING FEATHERING
+    // Strictly isolate edge feathering to the outermost 5% of the ribbon boundary, 
+    // guaranteeing clean rendering without re-introducing focus blur.
+    finalAlpha *= smoothstep(1.0, 0.95, edgeDist);
 
     if (finalAlpha < 0.005) discard;
 

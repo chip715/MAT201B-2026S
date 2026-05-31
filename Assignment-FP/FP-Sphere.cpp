@@ -114,7 +114,7 @@ struct AlloApp : DistributedAppWithState<WorldState> {
   ParameterInt activeParticles{"Active_Particles", "", 279, 10, MAX_N};
   Parameter pointSize       {"Point_Size", "", 4.083f, 1.0f, 10.0f};
   Parameter timeStep        {"Time_Step", "", 0.136f, 0.01f, 0.6f};
-  Parameter dragFactor      {"Drag_Factor", "", 0.700f, 0.0f, 0.9f};
+  Parameter dragFactor      {"Drag_Factor", "", 0.700f, 0.0f, 0.999f};
   ParameterBool enableWarp  {"Enable_Warp", "", 0.0f};
 
   ParameterBool enableClamp   {"Enable_Distance_Clamp", "", 0.0f};
@@ -131,6 +131,7 @@ struct AlloApp : DistributedAppWithState<WorldState> {
   ParameterBool enableBubbles {"Enable_Bubbles", "", 1.0f};  
   Parameter bubbleSize       {"Bubble_Size", "", 1.673f, 0.01f, 5.0f};
   ParameterBool enableRibbons{"Enable_Ribbons", "", 1.0f};
+  Parameter ribbonThickness{"Ribbon_Thickness", "", 0.05f, 0.005f, 0.4f};
   ParameterBool curvyLines   {"Curvy_Lines", "", 1.0f}; 
   ParameterInt maxRibbons    {"Max_Ribbons", "", 10, 1, 25};
 
@@ -170,11 +171,11 @@ struct AlloApp : DistributedAppWithState<WorldState> {
   vector<float> mass;
 
   void onInit() override {
-  // 1. Allosphere safe Cuttlebone initialization
-    auto cuttleboneDomain = CuttleboneStateSimulationDomain<WorldState>::enableCuttlebone(this);
-    if (!cuttleboneDomain) {
-      std::cerr << "WARNING: Cuttlebone failed to start. Running local mode fallback." << std::endl;
-    }
+  // // 1. Allosphere safe Cuttlebone initialization
+  //   auto cuttleboneDomain = CuttleboneStateSimulationDomain<WorldState>::enableCuttlebone(this);
+  //   if (!cuttleboneDomain) {
+  //     std::cerr << "WARNING: Cuttlebone failed to start. Running local mode fallback." << std::endl;
+  //   }
     
     if (isPrimary()) {
         auto GUIdomain = GUIDomain::enableGUI(defaultWindowDomain());
@@ -199,6 +200,7 @@ struct AlloApp : DistributedAppWithState<WorldState> {
         gui.add(enableBubbles);  
         gui.add(bubbleSize);
         gui.add(enableRibbons);
+        gui.add(ribbonThickness);
         gui.add(curvyLines); 
         gui.add(maxRibbons);
 
@@ -225,7 +227,7 @@ struct AlloApp : DistributedAppWithState<WorldState> {
 
     presetHandler << activeParticles << pointSize << timeStep << dragFactor << enableWarp << enableClamp
                   << enableOrbit << orbitAroundOrigin << orbitAroundCamera << orbitSpeed << orbitAxisX << orbitAxisY << orbitAxisZ
-                  << enableBubbles << bubbleSize << enableRibbons << curvyLines << maxRibbons
+                  << enableBubbles << bubbleSize << enableRibbons << curvyLines << maxRibbons << ribbonThickness
                   << enableSpring << springToOrigin << springToCamera << pinSpringToFront << springStiffness << springLength << focalDepth
                   << enableSwarm << perceptionRadius << repulsionStrength << desiredPersonalSpace << viscosity
                   << cameraPose; 
@@ -235,7 +237,7 @@ struct AlloApp : DistributedAppWithState<WorldState> {
 
     parameterServer() << activeParticles << pointSize << timeStep << dragFactor << enableWarp << enableClamp
                       << enableOrbit << orbitAroundOrigin << orbitAroundCamera << orbitSpeed << orbitAxisX << orbitAxisY << orbitAxisZ
-                      << enableBubbles << bubbleSize << enableRibbons << curvyLines << maxRibbons
+                      << enableBubbles << bubbleSize << enableRibbons << curvyLines << maxRibbons << ribbonThickness
                       << enableSpring << springToOrigin << springToCamera << pinSpringToFront << springStiffness << springLength << focalDepth
                       << enableSwarm << perceptionRadius << repulsionStrength << desiredPersonalSpace << viscosity
                       << cameraPose;
@@ -656,7 +658,7 @@ struct AlloApp : DistributedAppWithState<WorldState> {
       ribbons.primitive(Mesh::TRIANGLES);
 
       float h = perceptionRadius.get(); 
-      float line_thickness = 0.05f; 
+      float line_thickness = ribbonThickness.get();
       int segments = state().syncCurvyLines ? 8 : 1; 
 
       SpatialHash drawGrid;
