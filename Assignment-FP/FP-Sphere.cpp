@@ -20,6 +20,7 @@
 #include <vector>
 #include <unordered_map>
 #include <iostream>
+#include <filesystem>
 
 using namespace al;
 using namespace std;
@@ -155,7 +156,7 @@ struct AlloApp : DistributedAppWithState<WorldState> {
   //=================================================================
   // NATIVE ALLOLIB PRESET ARCHITECTURE
   //=================================================================
-  PresetHandler presetHandler{TimeMasterMode::TIME_MASTER_FREE, "../Presets_Vault", true}; 
+  PresetHandler presetHandler{TimeMasterMode::TIME_MASTER_FREE};
   PresetSequencer sequencer;
   SequenceRecorder recorder;
 
@@ -176,8 +177,24 @@ struct AlloApp : DistributedAppWithState<WorldState> {
   //   if (!cuttleboneDomain) {
   //     std::cerr << "WARNING: Cuttlebone failed to start. Running local mode fallback." << std::endl;
   //   }
+if (isPrimary()) {
+       string currentFile = __FILE__;
+        
+        // Find the last slash to strip out the file name "FP-Sphere.cpp"
+        size_t lastSlash = currentFile.find_last_of("\\/");
+        string assignmentDir = (lastSlash != string::npos) ? currentFile.substr(0, lastSlash) : ".";
+        
+        // Combine it to pinpoint your tracked vault repository folder perfectly
+        string absoluteVaultPath = assignmentDir + "/Presets_Vault";
+        
+        // FIXED: setRootPath is the accurate native method signature
+        presetHandler.setRootPath(absoluteVaultPath);
+        
+        cout << ">>> PRESET ENGINE ROOTED AT: " << presetHandler.getCurrentPath() << endl;
+    }
     
     if (isPrimary()) {
+        std::cout << ">>> PRESET ENGINE ROOTED AT: " << presetHandler.getCurrentPath() << std::endl;
         auto GUIdomain = GUIDomain::enableGUI(defaultWindowDomain());
         auto &gui = GUIdomain->newGUI();
 
@@ -244,6 +261,9 @@ struct AlloApp : DistributedAppWithState<WorldState> {
   }
 
   void onCreate() override {
+
+
+    
     pointShader.compile(slurp("../point-vertex.glsl"), slurp("../point-fragment.glsl"), slurp("../point-geometry.glsl"));
     bubbleShader.compile(slurp("../bubble-vertex.glsl"), slurp("../bubble-fragment.glsl"));
     ribbonShader.compile(slurp("../ribbon-vertex.glsl"), slurp("../ribbon-fragment.glsl"));
