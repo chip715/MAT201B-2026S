@@ -172,28 +172,22 @@ struct AlloApp : DistributedAppWithState<WorldState> {
   vector<float> mass;
 
   void onInit() override {
-  // // 1. Allosphere safe Cuttlebone initialization
-  //   auto cuttleboneDomain = CuttleboneStateSimulationDomain<WorldState>::enableCuttlebone(this);
-  //   if (!cuttleboneDomain) {
-  //     std::cerr << "WARNING: Cuttlebone failed to start. Running local mode fallback." << std::endl;
-  //   }
-if (isPrimary()) {
-       string currentFile = __FILE__;
-        
-        // Find the last slash to strip out the file name "FP-Sphere.cpp"
-        size_t lastSlash = currentFile.find_last_of("\\/");
-        string assignmentDir = (lastSlash != string::npos) ? currentFile.substr(0, lastSlash) : ".";
-        
-        // Combine it to pinpoint your tracked vault repository folder perfectly
-        string absoluteVaultPath = assignmentDir + "/Presets_Vault";
-        
-        // FIXED: setRootPath is the accurate native method signature
-        presetHandler.setRootPath(absoluteVaultPath);
-        
-        cout << ">>> PRESET ENGINE ROOTED AT: " << presetHandler.getCurrentPath() << endl;
+  // 1. Allosphere safe Cuttlebone initialization
+    auto cuttleboneDomain = CuttleboneStateSimulationDomain<WorldState>::enableCuttlebone(this);
+    if (!cuttleboneDomain) {
+      std::cerr << "WARNING: Cuttlebone failed to start. Running local mode fallback." << std::endl;
     }
     
     if (isPrimary()) {
+      //find the preset directory========================//
+        string currentFile = __FILE__;
+        size_t lastSlash = currentFile.find_last_of("\\/");
+        string assignmentDir = (lastSlash != string::npos) ? currentFile.substr(0, lastSlash) : ".";
+        string absoluteVaultPath = assignmentDir + "/Presets_Vault";
+        presetHandler.setRootPath(absoluteVaultPath);
+        cout << ">>> PRESET ENGINE ROOTED AT: " << presetHandler.getCurrentPath() << endl;
+   //====================================//
+
         std::cout << ">>> PRESET ENGINE ROOTED AT: " << presetHandler.getCurrentPath() << std::endl;
         auto GUIdomain = GUIDomain::enableGUI(defaultWindowDomain());
         auto &gui = GUIdomain->newGUI();
