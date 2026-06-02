@@ -174,10 +174,10 @@ struct AlloApp : DistributedAppWithState<WorldState> {
 
   void onInit() override {
   // 1. Allosphere safe Cuttlebone initialization
-    auto cuttleboneDomain = CuttleboneStateSimulationDomain<WorldState>::enableCuttlebone(this);
-    if (!cuttleboneDomain) {
-      std::cerr << "WARNING: Cuttlebone failed to start. Running local mode fallback." << std::endl;
-    }
+    // auto cuttleboneDomain = CuttleboneStateSimulationDomain<WorldState>::enableCuttlebone(this);
+    // if (!cuttleboneDomain) {
+    //   std::cerr << "WARNING: Cuttlebone failed to start. Running local mode fallback." << std::endl;
+    // }
     
     if (isPrimary()) {
       //find the preset directory========================//
@@ -700,13 +700,26 @@ struct AlloApp : DistributedAppWithState<WorldState> {
       // OPTIMIZATION 2: BAKE BEZIER POLYNOMIAL LOOKUP TABLE
       // The curve percentages (t, u) never change between ribbons.
       // =================================================================
-      struct BezierWeights { float c0, c1, c2, c3; float t; };
+// =================================================================
+      // OPTIMIZATION 2: BAKE BEZIER POLYNOMIALS & DERIVATIVE MULTIPLIERS
+      // =================================================================
+      struct BezierWeights { 
+          float c0, c1, c2, c3; // Position weights
+          float d0, d1, d2;     // Derivative velocity weights
+          float t; 
+      };
       std::vector<BezierWeights> curves(segments + 1);
       for(int k = 0; k <= segments; k++) {
           float t = (float)k / segments;
           float u = 1.0f - t;
-          curves[k] = { u*u*u, 3.0f*u*u*t, 3.0f*u*t*t, t*t*t, t };
+          curves[k] = { 
+              u*u*u, 3.0f*u*u*t, 3.0f*u*t*t, t*t*t, // Position
+              3.0f*u*u, 6.0f*u*t, 3.0f*t*t,         // Tangent components
+              t 
+          };
       }
+
+
 
       Vec3f camPos = nav().pos(); // Pre-fetch camera position
 
