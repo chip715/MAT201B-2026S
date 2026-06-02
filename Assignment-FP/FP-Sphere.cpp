@@ -173,11 +173,11 @@ struct AlloApp : DistributedAppWithState<WorldState> {
 
   void onInit() override {
   // 1. Allosphere safe Cuttlebone initialization
-    // auto cuttleboneDomain = CuttleboneStateSimulationDomain<WorldState>::enableCuttlebone(this);
-    // if (!cuttleboneDomain) {
-    //   std::cerr << "WARNING: Cuttlebone failed to start. Running local mode fallback." << std::endl;
-    // }
-    d
+    auto cuttleboneDomain = CuttleboneStateSimulationDomain<WorldState>::enableCuttlebone(this);
+    if (!cuttleboneDomain) {
+      std::cerr << "WARNING: Cuttlebone failed to start. Running local mode fallback." << std::endl;
+    }
+    
     if (isPrimary()) {
       //find the preset directory========================//
         string currentFile = __FILE__;
@@ -187,8 +187,6 @@ struct AlloApp : DistributedAppWithState<WorldState> {
         presetHandler.setRootPath(absoluteVaultPath);
         cout << ">>> PRESET ENGINE ROOTED AT: " << presetHandler.getCurrentPath() << endl;
    //====================================//
-
-      
 
         std::cout << ">>> PRESET ENGINE ROOTED AT: " << presetHandler.getCurrentPath() << std::endl;
         auto GUIdomain = GUIDomain::enableGUI(defaultWindowDomain());
@@ -816,6 +814,8 @@ struct AlloApp : DistributedAppWithState<WorldState> {
 
 int main() {
   AlloApp app;
+
+
   app.configureAudio(48000, 512, 2, 0);
   app.start();
 }
