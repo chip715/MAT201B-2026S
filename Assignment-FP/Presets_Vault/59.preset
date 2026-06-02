@@ -1,9 +1,9 @@
 ::59
-/Active_Particles i 296 
+/Active_Particles i 196 
 /Bubble_Size f 4.182000 
 /Camera_Pose fffffff 15.379891 60.541641 -73.119064 0.546858 -0.447610 0.676162 0.208318 
 /Curvy_Lines i 1 
-/Drag_Factor f 0.700000 
+/Drag_Factor f 0.900000 
 /Enable_Bubbles i 1 
 /Enable_Distance_Clamp i 0 
 /Enable_Orbit i 1 
@@ -12,7 +12,7 @@
 /Enable_Swarm i 1 
 /Enable_Warp i 0 
 /Focal_Depth f -10.000000 
-/Max_Ribbons i 25 
+/Max_Ribbons i 21 
 /Orbit_Around_Camera i 0 
 /Orbit_Around_Origin i 1 
 /Orbit_Axis_X f 1.000000 

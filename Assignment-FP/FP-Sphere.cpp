@@ -673,13 +673,42 @@ struct AlloApp : DistributedAppWithState<WorldState> {
     g.shader().use(0); 
     g.meshColor(); 
 
-    if (state().syncEnableRibbons) {
+   if (state().syncEnableRibbons) {
       Mesh ribbons;
       ribbons.primitive(Mesh::TRIANGLES);
 
       float h = perceptionRadius.get(); 
+      float h_sqr = h * h; // Pre-square the radius for fast bounding box rejection
       float line_thickness = ribbonThickness.get();
-      int segments = state().syncCurvyLines ? 8 : 1; 
+      int segments = state().syncCurvyLines ? 5 : 1; 
+
+      // =================================================================
+      // OPTIMIZATION 1: PRE-CALCULATE VELOCITY NORMALS
+      // Normalizing vectors is expensive. Do it exactly once per particle.
+      // =================================================================
+      std::vector<Vec3f> normVel(current_N);
+      for(int i = 0; i < current_N; i++) {
+          float vMagSqr = velocity[i].magSqr();
+          if (vMagSqr < 0.000001f) {
+              normVel[i] = Vec3f(1, 0, 0); 
+          } else {
+              normVel[i] = velocity[i] / std::sqrt(vMagSqr);
+          }
+      }
+
+      // =================================================================
+      // OPTIMIZATION 2: BAKE BEZIER POLYNOMIAL LOOKUP TABLE
+      // The curve percentages (t, u) never change between ribbons.
+      // =================================================================
+      struct BezierWeights { float c0, c1, c2, c3; float t; };
+      std::vector<BezierWeights> curves(segments + 1);
+      for(int k = 0; k <= segments; k++) {
+          float t = (float)k / segments;
+          float u = 1.0f - t;
+          curves[k] = { u*u*u, 3.0f*u*u*t, 3.0f*u*t*t, t*t*t, t };
+      }
+
+      Vec3f camPos = nav().pos(); // Pre-fetch camera position
 
       SpatialHash drawGrid;
       drawGrid.build(mesh.vertices(), h, current_N);
@@ -693,64 +722,69 @@ struct AlloApp : DistributedAppWithState<WorldState> {
           
           Vec3f A = mesh.vertices()[i];
           Vec3f B = mesh.vertices()[j];
-          float distance = (B - A).mag();
+          Vec3f diff = B - A;
+          
+          // =================================================================
+          // OPTIMIZATION 3: FAST SQUARED DISTANCE REJECTION
+          // Bypass square-root math entirely if particles are out of bounds
+          // =================================================================
+          float distSqr = diff.magSqr();
 
-          if (distance < h && distance > 0.001f) {
+          if (distSqr < h_sqr && distSqr > 0.000001f) {
             if (drawn_count >= connection_limit) break;
             drawn_count++; 
             
-            Vec3f dirA = velocity[i];
-            if (dirA.mag() < 0.001f) dirA = (B - A);
-            dirA.normalize();
-
-            Vec3f dirB = velocity[j];
-            if (dirB.mag() < 0.001f) dirB = (B - A);
-            dirB.normalize();
+            float distance = std::sqrt(distSqr);
+            
+            // Read from our pre-calculated normal vector table
+            Vec3f dirA = normVel[i];
+            Vec3f dirB = normVel[j];
 
             Vec3f P0 = A;
             Vec3f P3 = B;
             Vec3f P1, P2;
 
             if (state().syncCurvyLines) {
-                P1 = A + dirA * (distance * 0.35f);
-                P2 = B - dirB * (distance * 0.35f);
+                float tangentScale = distance * 0.35f;
+                P1 = A + dirA * tangentScale;
+                P2 = B - dirB * tangentScale;
             } else {
-                P1 = A + (B - A) * 0.333f;
-                P2 = A + (B - A) * 0.666f;
+                P1 = A + diff * 0.333f;
+                P2 = A + diff * 0.666f;
             }
             
             float dist_t = distance / h;
-            float math_opacity = 0.8f * (1.0f - dist_t)+0.15f; 
-            math_opacity = std::max(0.0f, std::min(math_opacity, 1.0f));
-            
+            float math_opacity = std::max(0.0f, std::min(0.8f * (1.0f - dist_t) + 0.15f, 1.0f));
             float r_color = std::min(2.0f * dist_t, 1.0f);
             float g_color = std::min(2.0f * (1.0f - dist_t), 1.0f);
             Color c(r_color, g_color, 0.0f, math_opacity);
 
+            Vec3f ribbonAxis = diff / distance; 
+            Vec3f midPoint = (A + B) * 0.5f;
+            Vec3f master_view_dir = (camPos - midPoint).normalize();
+            Vec3f master_right = cross(ribbonAxis, master_view_dir);
+            if (master_right.magSqr() < 0.0001f) master_right = Vec3f(1, 0, 0);
+            else master_right.normalize();
+            
+            Vec3f offset = master_right * line_thickness;
             Vec3f prev_v0, prev_v1;
 
+            // =================================================================
+            // OPTIMIZATION 4: FLAT BEZIER EXTRUSION
+            // Utilize the baked polynomial lookups
+            // =================================================================
             for (int k = 0; k <= segments; k++) {
-              float t = (float)k / segments;
-              float u = 1.0f - t;
+              const auto& w = curves[k];
 
-              Vec3f p = (u*u*u)*P0 + 3*(u*u)*t*P1 + 3*u*(t*t)*P2 + (t*t*t)*P3;
+              // Fast, single-line Bezier calculation using baked coefficients
+              Vec3f p = P0 * w.c0 + P1 * w.c1 + P2 * w.c2 + P3 * w.c3;
 
-              Vec3f tangent = 3*u*u*(P1 - P0) + 6*u*t*(P2 - P1) + 3*t*t*(P3 - P2);
-              if (tangent.mag() < 0.001f) tangent = (B - A);
-              tangent.normalize();
-
-              Vec3f view_dir = (nav().pos() - p).normalize();
-              Vec3f right = cross(tangent, view_dir);
-              if (right.mag() < 0.001f) right = Vec3f(1, 0, 0); 
-              right.normalize();
-
-              Vec3f offset = right * line_thickness;
               Vec3f v0 = p + offset;
               Vec3f v1 = p - offset;
         
               if (k > 0) {
-                float prev_t = (float)(k - 1) / segments;
-                float curr_t = (float)k / segments;
+                float prev_t = curves[k-1].t;
+                float curr_t = w.t;
 
                 ribbons.vertex(prev_v0); ribbons.color(c); ribbons.texCoord(prev_t, -1.0f);
                 ribbons.vertex(prev_v1); ribbons.color(c); ribbons.texCoord(prev_t,  1.0f);
