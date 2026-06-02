@@ -1,8 +1,8 @@
-::6
-/Active_Particles i 106 
+::24
+/Active_Particles i 500 
 /Bubble_Size f 0.010000 
-/Camera_Pose fffffff -94.630486 1.019254 17.942053 -0.583572 0.413739 -0.538963 0.444728 
-/Curvy_Lines i 0 
+/Camera_Pose fffffff -14.606303 3.483054 -17.961807 0.036795 -0.361305 -0.194133 0.911272 
+/Curvy_Lines i 1 
 /Drag_Factor f 0.700000 
 /Enable_Bubbles i 1 
 /Enable_Distance_Clamp i 0 
@@ -15,20 +15,20 @@
 /Max_Ribbons i 10 
 /Orbit_Around_Camera i 0 
 /Orbit_Around_Origin i 1 
-/Orbit_Axis_X f -0.880000 
-/Orbit_Axis_Y f -0.402000 
-/Orbit_Axis_Z f -1.000000 
-/Orbit_Speed f -0.035000 
-/Perception_Radius f 3.607000 
+/Orbit_Axis_X f 1.000000 
+/Orbit_Axis_Y f 1.000000 
+/Orbit_Axis_Z f 1.000000 
+/Orbit_Speed f 4.400000 
+/Perception_Radius f 8.516000 
 /Personal_Space f 15.349000 
 /Pin_Spring_to_Camera_Front i 0 
-/Point_Size f 4.083000 
-/Repulsion_Strength f 86.738998 
-/Ribbon_Thickness f 0.042000 
+/Point_Size f 1.249000 
+/Repulsion_Strength f 43.298000 
+/Ribbon_Thickness f 0.005000 
 /Spring_Center_to_Camera i 1 
 /Spring_Center_to_Origin i 0 
-/Spring_Length f 11.663000 
-/Spring_Stiffness f 0.718000 
+/Spring_Length f 0.000000 
+/Spring_Stiffness f 0.871000 
 /Time_Step f 0.039000 
 /Viscosity f 1.400000 
 ::

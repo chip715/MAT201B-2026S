@@ -294,10 +294,10 @@ struct AlloApp : DistributedAppWithState<WorldState> {
 
   void onInit() override {
 
-    auto cuttleboneDomain = CuttleboneStateSimulationDomain<WorldState>::enableCuttlebone(this);
-    if (!cuttleboneDomain) {
-      std::cerr << "WARNING: Cuttlebone failed to start. Running local mode fallback." << std::endl;
-    }
+    // auto cuttleboneDomain = CuttleboneStateSimulationDomain<WorldState>::enableCuttlebone(this);
+    // if (!cuttleboneDomain) {
+    //   std::cerr << "WARNING: Cuttlebone failed to start. Running local mode fallback." << std::endl;
+    // }
     
     if (isPrimary()) {
         auto GUIdomain = GUIDomain::enableGUI(defaultWindowDomain());
