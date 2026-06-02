@@ -157,6 +157,7 @@ struct AlloApp : DistributedAppWithState<WorldState> {
   // NATIVE ALLOLIB PRESET ARCHITECTURE
   //=================================================================
   PresetHandler presetHandler{TimeMasterMode::TIME_MASTER_FREE};
+  ParameterString activeShowPreset{"Active_Preset_Indicator", "", "none"};
   PresetSequencer sequencer;
   SequenceRecorder recorder;
 
@@ -186,11 +187,13 @@ struct AlloApp : DistributedAppWithState<WorldState> {
         string absoluteVaultPath = assignmentDir + "/Presets_Vault";
         presetHandler.setRootPath(absoluteVaultPath);
         cout << ">>> PRESET ENGINE ROOTED AT: " << presetHandler.getCurrentPath() << endl;
-   //====================================//
+      //====================================//
 
         std::cout << ">>> PRESET ENGINE ROOTED AT: " << presetHandler.getCurrentPath() << std::endl;
         auto GUIdomain = GUIDomain::enableGUI(defaultWindowDomain());
         auto &gui = GUIdomain->newGUI();
+        gui.add(activeShowPreset);
+        
 
         gui.add(activeParticles);
         gui.add(pointSize); 
@@ -299,9 +302,12 @@ struct AlloApp : DistributedAppWithState<WorldState> {
     state().frame++;
     state().time += dt;
 
-    if (freeze) return;
-
     presetHandler.stepMorphing(); 
+   static int currentShowIndex = 1;
+    static bool wasMorphingLastFrame = false;
+
+  
+     if (freeze) return;
 
     // =======================================================
     // FIXED TWO-WAY CAMERA SYNC FOR SEQUENCE RECORDER
