@@ -174,10 +174,10 @@ struct AlloApp : DistributedAppWithState<WorldState> {
 
   void onInit() override {
   // 1. Allosphere safe Cuttlebone initialization
-    // auto cuttleboneDomain = CuttleboneStateSimulationDomain<WorldState>::enableCuttlebone(this);
-    // if (!cuttleboneDomain) {
-    //   std::cerr << "WARNING: Cuttlebone failed to start. Running local mode fallback." << std::endl;
-    // }
+    auto cuttleboneDomain = CuttleboneStateSimulationDomain<WorldState>::enableCuttlebone(this);
+    if (!cuttleboneDomain) {
+      std::cerr << "WARNING: Cuttlebone failed to start. Running local mode fallback." << std::endl;
+    }
     
     if (isPrimary()) {
       //find the preset directory========================//
